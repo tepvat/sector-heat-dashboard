@@ -1,0 +1,8 @@
+sector-heat-dashboard/
+│
+├─ app.py                 # Streamlit-käyttöliittymä
+├─ baskets.yml            # Tokenit + omistukset
+├─ heat_score.py          # Piste­logiikka
+├─ data_fetch.py          # API-kyselyt hinnalle, fundingille, TVL:lle
+├─ alert_bot.py           # Telegram-hälytys
+└─ requirements.txt
