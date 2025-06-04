@@ -1,72 +1,96 @@
 # heat_score.py
 # -------------
 """
-Laskee AI-, RWA- ja L1-korien 'heat score'-pisteet.
+Laskee sektorikohtaiset 'heat score' -pisteet kolmesta tekijästä:
 
-Pisteytys v1:
-+2 pistettä, jos korin tokenien keskimääräinen hinta on noussut
-   vähintään +40 % viimeisten 7 päivän aikana (verrattuna 8 päivää sitten
-   kirjattuihin hintoihin prices.csv-tiedostossa).
+1) 7 vrk hinnan keskimääräinen muutos  (≥ +40 %  → +2 p)
+2) Perpetual-futuurien funding-rate    (≥ 0,12 %  → +2 p)
+3) 30 vrk TVL-kasvu (DeFiLlama)        (≥ +60 %  → +2 p)
 
-Future: lisää funding- ja TVL-pisteet.
+Palauttaa dictin {'AI':0–6, 'RWA':0–6, 'L1':0–6}.
 """
 
-import yaml
-import pandas as pd
 from pathlib import Path
-from typing import Dict
+import datetime
+import statistics
+from typing import Dict, List
+
+import pandas as pd
+
+from data_fetch import BASKETS, get_funding  # BASKETS = YAML-korit, get_funding = Binance+Bybit
+
+# -------------------- raja-arvot --------------------
+PRICE_THRESHOLD = 0.40    # +40 %
+FUNDING_THRESHOLD = 0.0012  # 0,12 % (8 h)
+TVL_THRESHOLD = 0.60      # +60 % (30 vrk)
+
+# TVL-mapping: kori → DeFiLlama-protokolla
+BASKET_TO_PROTOCOL = {
+    "AI": None,           # ei TVL-pisteitä tälle
+    "RWA": None,          # -||-
+    "L1": "solana",       # esimerkki; muokkaa tarpeen mukaan
+}
+
 
 # ---------------------------------------------------------------------------
-# 1. Lataa korit
+# 1. Apu: prosenttimuutos & turvallinen luku csv:stä
 # ---------------------------------------------------------------------------
-BASKETS: Dict[str, dict]
+def _pct_change(new: float, old: float) -> float:
+    return (new - old) / old if old else 0.0
 
-with open("baskets.yml", "r", encoding="utf-8") as fh:
-    BASKETS = yaml.safe_load(fh)
+
+def _read_csv(path: str) -> pd.DataFrame | None:
+    if Path(path).exists():
+        return pd.read_csv(path, parse_dates=["date"]).set_index("date")
+    return None
+
 
 # ---------------------------------------------------------------------------
 # 2. Pääfunktio
 # ---------------------------------------------------------------------------
-def calc_scores(csv_path: str = "prices.csv") -> Dict[str, int]:
-    """
-    Lukee prices.csv, laskee 7 d prosentti­muutoksen ja palauttaa
-    dictin { 'AI': 0/2, 'RWA': 0/2, 'L1': 0/2 }.
-    """
-    # --- varmista, että historiaa on tarpeeksi ---
-    csv_file = Path(csv_path)
-    if not csv_file.exists():
-        return {basket: 0 for basket in BASKETS}
+def calc_scores() -> Dict[str, int]:
+    # ---------------- hinnat ----------------
+    price_df = _read_csv("prices.csv")
+    price_scores: Dict[str, int] = {b: 0 for b in BASKETS}
 
-    df = pd.read_csv(csv_file, parse_dates=["date"]).set_index("date")
+    if price_df is not None and len(price_df) >= 8:
+        today, week_ago = price_df.iloc[-1], price_df.iloc[-8]
+        pct_series = (today - week_ago) / week_ago
+        for basket, tokens in BASKETS.items():
+            tokens_present = [t for t in tokens if t in pct_series.index]
+            if tokens_present:
+                avg_change = pct_series[tokens_present].mean()
+                if avg_change >= PRICE_THRESHOLD:
+                    price_scores[basket] = 2
 
-    if len(df) < 8:            # alle 8 riviä = ei 7 pv vertailua
-        return {basket: 0 for basket in BASKETS}
-
-    today_prices    = df.iloc[-1]
-    week_ago_prices = df.iloc[-8]
-
-    pct_change = (today_prices - week_ago_prices) / week_ago_prices
-
-    scores: Dict[str, int] = {}
+    # ---------------- funding ----------------
+    funding_scores: Dict[str, int] = {}
     for basket, tokens in BASKETS.items():
-        # Nouda vain ne token-sarakkeet, jotka löytyvät csv:stä
-        present = [t for t in tokens if t in pct_change]
-        if not present:
-            scores[basket] = 0
-            continue
+        high = any(get_funding(tok) >= FUNDING_THRESHOLD for tok in tokens)
+        funding_scores[basket] = 2 if high else 0
 
-        basket_change = pct_change[present].mean()
+    # ---------------- TVL ----------------
+    tvl_scores: Dict[str, int] = {b: 0 for b in BASKETS}
+    tvl_df = _read_csv("tvl.csv")
 
-        score = 2 if basket_change >= 0.40 else 0
-        # Tulevaisuudessa lisää funding-/TVL-pisteet tähän
+    if tvl_df is not None and len(tvl_df) >= 31:
+        today, month_ago = tvl_df.iloc[-1], tvl_df.iloc[-31]
+        tvl_pct = (today - month_ago) / month_ago
+        for basket, proto in BASKET_TO_PROTOCOL.items():
+            if proto and proto in tvl_pct.index and tvl_pct[proto] >= TVL_THRESHOLD:
+                tvl_scores[basket] = 2
 
-        scores[basket] = score
+    # ---------------- yhdistä ----------------
+    final_scores = {
+        b: price_scores[b] + funding_scores[b] + tvl_scores[b]
+        for b in BASKETS
+    }
+    return final_scores
 
-    return scores
 
 # ---------------------------------------------------------------------------
-# 3. Suorita skripti paikallisesti
+# 3. Debug-ajo: tulosta pistetaulukko terminaaliin
 # ---------------------------------------------------------------------------
 if __name__ == "__main__":
     s = calc_scores()
-    print("Current sector scores:", s)
+    print(f"[{datetime.date.today()}] Current sector scores:", s)
