@@ -15,6 +15,7 @@ import datetime
 import statistics
 from typing import Dict, List
 
+import yaml
 import pandas as pd
 
 from data_fetch import BASKETS, get_funding  # BASKETS = YAML-korit, get_funding = Binance+Bybit
@@ -31,6 +32,10 @@ BASKET_TO_PROTOCOL = {
     "L1": "solana",       # esimerkki; muokkaa tarpeen mukaan
 }
 
+BASE_DIR = Path(__file__).resolve().parent
+
+with open(BASE_DIR / "baskets.yml", "r", encoding="utf-8") as fh:
+    BASKETS = yaml.safe_load(fh)
 
 # ---------------------------------------------------------------------------
 # 1. Apu: prosenttimuutos & turvallinen luku csv:stä

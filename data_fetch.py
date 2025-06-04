@@ -17,6 +17,15 @@ from typing import Dict, List
 import requests
 import yaml
 
+from pathlib import Path
+
+# Projektin juurikansio (= kansion, jossa tämä .py-tiedosto sijaitsee)
+BASE_DIR = Path(__file__).resolve().parent
+
+# ... myöhemmin:
+with open(BASE_DIR / "baskets.yml", encoding="utf-8") as fh:
+    BASKETS = yaml.safe_load(fh)
+
 # ---------------------------------------------------------------------------
 # 0. Korit ja token-listat
 # ---------------------------------------------------------------------------
