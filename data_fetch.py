@@ -1,13 +1,20 @@
-import requests, time
+import requests, csv, datetime, os, yaml
 
 CG_ENDPOINT = "https://api.coingecko.com/api/v3/simple/price"
+BASKETS = yaml.safe_load(open("baskets.yml"))
 
 def get_prices(symbols: list[str]) -> dict[str, float]:
     ids = ",".join(symbols).lower()
     url = f"{CG_ENDPOINT}?ids={ids}&vs_currencies=usd"
     r = requests.get(url, timeout=10).json()
-    return {k.upper(): v["usd"] for k, v in r.items()}
+    return {k.upper(): r[k.lower()]["usd"] for k in r}
 
-# TODO: funding & TVL – placeholder funkat
-def get_funding(symbol): return 0.001  # dummy
-def get_tvl(protocol):   return 1_000_000
+def save_snapshot(prices: dict[str, float], path="prices.csv"):
+    header = ["date"] + list(prices.keys())
+    file_exists = os.path.isfile(path)
+    with open(path, "a", newline="") as f:
+        w = csv.writer(f)
+        if not file_exists:
+            w.writerow(header)
+        row = [datetime.date.today().isoformat()] + [prices[k] for k in prices]
+        w.writerow(row)

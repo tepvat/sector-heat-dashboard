@@ -1,27 +1,72 @@
-import yaml, pandas as pd
-from data_fetch import get_prices, get_funding, get_tvl
+# heat_score.py
+# -------------
+"""
+Laskee AI-, RWA- ja L1-korien 'heat score'-pisteet.
 
-RULES = {
-    "price_7d": 0.40,          # +40 % / 7 d → +2 pistettä
-    "funding": 0.0012,         # >0.12 %/8h → +2
-}
+Pisteytys v1:
++2 pistettä, jos korin tokenien keskimääräinen hinta on noussut
+   vähintään +40 % viimeisten 7 päivän aikana (verrattuna 8 päivää sitten
+   kirjattuihin hintoihin prices.csv-tiedostossa).
 
-def load_baskets(path="baskets.yml"):
-    with open(path) as f:
-        return yaml.safe_load(f)
+Future: lisää funding- ja TVL-pisteet.
+"""
 
-def calc_scores():
-    baskets = load_baskets()
-    tickers = {t for tok in baskets.values() for t in tok}
-    prices_now = get_prices(list(tickers))
-    # (tallenna aiemmat hinnat CSV:hen – tässä esimerkki: kaikki +0 p)
-    scores = {}
-    for name, holdings in baskets.items():
-        price_pump    = False     # TODO: vertaile 7 d sitten tallennettuun arvoon
-        high_funding  = any(get_funding(t) > RULES["funding"] for t in holdings)
-        score = 0
-        if price_pump:   score += 2
-        if high_funding: score += 2
-        # lisää TVL ym.
-        scores[name] = score
+import yaml
+import pandas as pd
+from pathlib import Path
+from typing import Dict
+
+# ---------------------------------------------------------------------------
+# 1. Lataa korit
+# ---------------------------------------------------------------------------
+BASKETS: Dict[str, dict]
+
+with open("baskets.yml", "r", encoding="utf-8") as fh:
+    BASKETS = yaml.safe_load(fh)
+
+# ---------------------------------------------------------------------------
+# 2. Pääfunktio
+# ---------------------------------------------------------------------------
+def calc_scores(csv_path: str = "prices.csv") -> Dict[str, int]:
+    """
+    Lukee prices.csv, laskee 7 d prosentti­muutoksen ja palauttaa
+    dictin { 'AI': 0/2, 'RWA': 0/2, 'L1': 0/2 }.
+    """
+    # --- varmista, että historiaa on tarpeeksi ---
+    csv_file = Path(csv_path)
+    if not csv_file.exists():
+        return {basket: 0 for basket in BASKETS}
+
+    df = pd.read_csv(csv_file, parse_dates=["date"]).set_index("date")
+
+    if len(df) < 8:            # alle 8 riviä = ei 7 pv vertailua
+        return {basket: 0 for basket in BASKETS}
+
+    today_prices    = df.iloc[-1]
+    week_ago_prices = df.iloc[-8]
+
+    pct_change = (today_prices - week_ago_prices) / week_ago_prices
+
+    scores: Dict[str, int] = {}
+    for basket, tokens in BASKETS.items():
+        # Nouda vain ne token-sarakkeet, jotka löytyvät csv:stä
+        present = [t for t in tokens if t in pct_change]
+        if not present:
+            scores[basket] = 0
+            continue
+
+        basket_change = pct_change[present].mean()
+
+        score = 2 if basket_change >= 0.40 else 0
+        # Tulevaisuudessa lisää funding-/TVL-pisteet tähän
+
+        scores[basket] = score
+
     return scores
+
+# ---------------------------------------------------------------------------
+# 3. Suorita skripti paikallisesti
+# ---------------------------------------------------------------------------
+if __name__ == "__main__":
+    s = calc_scores()
+    print("Current sector scores:", s)
