@@ -6,7 +6,7 @@ Sisältää Asia-rangen (00-07 UTC), eilisen VWAP:n ja funding-raten.
 import os, datetime, requests, statistics, telegram
 from data_fetch import get_funding          # funktio on jo projektissasi
 
-TOKENS = ["BTC", "ETH", "SOL", "BNB"]       # lisää alttisi tarvittaessa
+TOKENS = ["BTCUSDC", "ETHUSDC", "SOLUSDC", "BNBUSDC"]       # lisää alttisi tarvittaessa
 
 BINANCE_KLINES = "https://api.binance.com/api/v3/klines"
 BINANCE_VWAP   = "https://api.binance.com/api/v3/avgPrice"
