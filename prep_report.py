@@ -18,14 +18,23 @@ SYMBOL_MAP = {
     # …
 }
 
-def asia_range(symbol: str):
+def asia_range(symbol: str) -> tuple[float | None, float | None]:
     pair = SYMBOL_MAP.get(symbol, f"{symbol}USDT")
-    if pair is None:                  # ei spot-dataa
+    if pair is None:                      # ei Binance-spottiparia
         return None, None
-    url = f"{BINANCE_KLINES}?symbol={pair}&interval=15m&startTime={start}&endTime={end}"
+
+    # ⬇️⟵  NÄMÄ PUUTTUIVAT
+    now   = datetime.datetime.utcnow()
+    end   = int(now.replace(minute=0, second=0, microsecond=0).timestamp()*1000)
+    start = end - 7*60*60*1000            # 7 h taaksepäin
+    # -----------------------------------
+
+    url = (f"{BINANCE_KLINES}?symbol={pair}"
+           f"&interval=15m&startTime={start}&endTime={end}")
     data = requests.get(url, timeout=10).json()
-    if not isinstance(data, list):
+    if not isinstance(data, list):        # API-virhe => dict
         return None, None
+
     highs = [float(c[2]) for c in data]
     lows  = [float(c[3]) for c in data]
     return max(highs), min(lows)
