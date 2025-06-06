@@ -39,9 +39,22 @@ def get_coin_data(tokens):
         print(f"CoinGecko API error: {e}")
         return {}
 
+def get_movement_emoji(current, low, high):
+    # Suhde low–high välillä
+    try:
+        ratio = (current - low) / (high - low)
+    except ZeroDivisionError:
+        return "⚪️"  # Ei tietoa
+    if ratio >= 0.8:
+        return "🟢⬆️"
+    elif ratio <= 0.2:
+        return "🔴⬇️"
+    else:
+        return "🟡"
+
 def build_message() -> str:
     today = datetime.date.today().isoformat()
-    lines = [f"*London prep*  {today} 06:30 UTC"]
+    lines = [f"*London prep*  {today} 06:30 UTC\n"]
 
     data = get_coin_data(TOKENS)
 
@@ -51,8 +64,12 @@ def build_message() -> str:
             lines.append(f"`{token}`  ⚠️ pair missing or API error")
             continue
 
+        emoji = get_movement_emoji(c['price'], c['low'], c['high'])
         lines.append(
-            f"`{token}`  Asia {c['low']:.1f}–{c['high']:.1f} · VWAP N/A · Price ${c['price']:.1f}"
+            f"*{token}*  {emoji}\n"
+            f"`Asia:`  {c['low']:.1f}–{c['high']:.1f}\n"
+            f"`Price:`  ${c['price']:.1f}\n"
+            f"`VWAP:`  N/A\n"
         )
 
     return "\n".join(lines)
