@@ -44,13 +44,15 @@ def get_movement_emoji(current, low, high):
     try:
         ratio = (current - low) / (high - low)
     except ZeroDivisionError:
-        return "⚪️"  # Ei tietoa
+        return "⚪️", None  # Ei tietoa
+    percent = int(ratio * 100)
     if ratio >= 0.8:
-        return "🟢⬆️"
+        emoji = "🟢⬆️"
     elif ratio <= 0.2:
-        return "🔴⬇️"
+        emoji = "🔴⬇️"
     else:
-        return "🟡"
+        emoji = "🟡"
+    return emoji, percent
 
 def build_message() -> str:
     today = datetime.date.today().isoformat()
@@ -64,9 +66,11 @@ def build_message() -> str:
             lines.append(f"`{token}`  ⚠️ pair missing or API error")
             continue
 
-        emoji = get_movement_emoji(c['price'], c['low'], c['high'])
+        emoji, percent = get_movement_emoji(c['price'], c['low'], c['high'])
+        percent_text = f"{percent}%" if percent is not None else "N/A"
+
         lines.append(
-            f"*{token}*  {emoji}\n"
+            f"*{token}*  {emoji} ({percent_text})\n"
             f"`Asia:`  {c['low']:.1f}–{c['high']:.1f}\n"
             f"`Price:`  ${c['price']:.1f}\n"
             f"`VWAP:`  N/A\n"
