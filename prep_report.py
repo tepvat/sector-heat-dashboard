@@ -1,5 +1,6 @@
 import datetime, requests
 
+# Mappaukset symboleihin
 SYMBOL_MAP = {
     "BTC": "bitcoin",
     "ETH": "ethereum",
@@ -7,10 +8,53 @@ SYMBOL_MAP = {
     "BNB": "binancecoin",
 }
 
+SYMBOL_TO_BINANCE = {
+    "BTC": "BTCUSDT",
+    "ETH": "ETHUSDT",
+    "SOL": "SOLUSDT",
+    "BNB": "BNBUSDT"
+}
+
 TOKENS = ["BTC", "ETH", "SOL", "BNB"]
 
 COINGECKO_MARKET_URL = "https://api.coingecko.com/api/v3/coins/markets"
 
+# --- VWAP-laskenta ---
+def fetch_ohlcv(symbol='BTCUSDT', interval='15m', limit=96):
+    """
+    Hakee Binance API:sta OHLCV-datan (default: viimeisen 24h, 15min kynttilät = 96 kpl)
+    """
+    url = "https://api.binance.com/api/v3/klines"
+    params = {'symbol': symbol, 'interval': interval, 'limit': limit}
+    resp = requests.get(url, params=params, timeout=10)
+    data = resp.json()
+    ohlcv = []
+    for row in data:
+        ohlcv.append({
+            'high': float(row[2]),
+            'low': float(row[3]),
+            'close': float(row[4]),
+            'volume': float(row[5])
+        })
+    return ohlcv
+
+def calculate_vwap(ohlcv):
+    total_pv = 0
+    total_vol = 0
+    for k in ohlcv:
+        price = (k['high'] + k['low'] + k['close']) / 3
+        vol = k['volume']
+        total_pv += price * vol
+        total_vol += vol
+    if total_vol == 0:
+        return None
+    return total_pv / total_vol
+
+def get_vwap(symbol='BTCUSDT'):
+    ohlcv = fetch_ohlcv(symbol, interval='15m', limit=96)  # viimeisen 24h (15m kynttilät)
+    return calculate_vwap(ohlcv)
+
+# --- Hinta- ja range-tiedot ---
 def get_coin_data(tokens):
     ids = ','.join(SYMBOL_MAP[token] for token in tokens)
     params = {
@@ -39,8 +83,8 @@ def get_coin_data(tokens):
         print(f"CoinGecko API error: {e}")
         return {}
 
+# --- Nuoli & prosenttiluku ---
 def get_movement_emoji(current, low, high):
-    # Suhde low–high välillä
     try:
         ratio = (current - low) / (high - low)
     except ZeroDivisionError:
@@ -54,11 +98,23 @@ def get_movement_emoji(current, low, high):
         emoji = "🟡"
     return emoji, percent
 
+# --- Rakennetaan viesti ---
 def build_message() -> str:
     today = datetime.date.today().isoformat()
     lines = [f"*London prep*  {today} 06:30 UTC\n"]
 
     data = get_coin_data(TOKENS)
+
+    # Haetaan VWAPit kaikille tokeneille
+    vwap_data = {}
+    for token in TOKENS:
+        try:
+            binance_symbol = SYMBOL_TO_BINANCE[token]
+            vwap = get_vwap(binance_symbol)
+            vwap_data[token] = vwap
+        except Exception as e:
+            print(f"VWAP error {token}: {e}")
+            vwap_data[token] = None
 
     for token in TOKENS:
         c = data.get(token)
@@ -68,12 +124,19 @@ def build_message() -> str:
 
         emoji, percent = get_movement_emoji(c['price'], c['low'], c['high'])
         percent_text = f"{percent}%" if percent is not None else "N/A"
+        vwap = vwap_data[token]
+        if vwap is None:
+            vwap_str = "N/A"
+            vwap_emoji = ""
+        else:
+            vwap_emoji = "🟢" if c['price'] > vwap else "🔴"
+            vwap_str = f"{vwap_emoji} {vwap:.1f}"
 
         lines.append(
             f"*{token}*  {emoji} ({percent_text})\n"
             f"`Asia:`  {c['low']:.1f}–{c['high']:.1f}\n"
             f"`Price:`  ${c['price']:.1f}\n"
-            f"`VWAP:`  N/A\n"
+            f"`VWAP:`  {vwap_str}\n"
         )
 
     return "\n".join(lines)
@@ -91,3 +154,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+    
