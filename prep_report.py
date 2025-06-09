@@ -2,6 +2,11 @@ import datetime
 import requests
 import logging
 import os
+import pandas as pd
+import matplotlib.pyplot as plt
+import mplfinance as mpf
+from matplotlib.dates import DateFormatter
+import matplotlib.dates as mdates
 
 # Set up logging
 log_file = 'vwap_debug.log'
@@ -56,33 +61,20 @@ def fetch_ohlcv(coin_id, days=1):
             
         logging.debug(f"First row raw data: {data[0]}")
         
-        ohlcv = []
-        for i, row in enumerate(data):
-            try:
-                # CoinGecko returns: [timestamp, open, high, low, close]
-                ohlcv.append({
-                    'high': float(row[2]),
-                    'low': float(row[3]),
-                    'close': float(row[4]),
-                    'volume': 1.0  # CoinGecko doesn't provide volume in OHLC endpoint
-                })
-                if i < 2:
-                    logging.debug(f"Parsed row {i}: {ohlcv[-1]}")
-            except (IndexError, ValueError) as e:
-                logging.error(f"Failed to parse row {i}: {row}")
-                logging.error(f"Error: {e}")
-                continue
-                
-        logging.debug(f"Successfully parsed {len(ohlcv)} rows")
-        return ohlcv
+        # Convert to pandas DataFrame
+        df = pd.DataFrame(data, columns=['timestamp', 'open', 'high', 'low', 'close'])
+        df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
+        df.set_index('timestamp', inplace=True)
+        
+        return df
         
     except requests.exceptions.RequestException as e:
         logging.error(f"Request failed for {coin_id}: {e}")
-        return []
+        return None
     except Exception as e:
         logging.error(f"Unexpected error in fetch_ohlcv for {coin_id}: {e}")
         logging.error(f"Error type: {type(e)}")
-        return []
+        return None
 
 def calculate_vwap(ohlcv):
     if not ohlcv:
@@ -182,46 +174,147 @@ def get_movement_emoji(current, low, high):
     return emoji, percent
 
 # --- Rakennetaan viesti ---
+def create_price_chart(symbol, df, vwap, high, low, current_price):
+    # Create figure and axis
+    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 8), gridspec_kw={'height_ratios': [3, 1]})
+    
+    # Plot candlesticks
+    mpf.plot(df, type='candle', style='charles',
+             title=f'{symbol} Price Chart',
+             ylabel='Price (USD)',
+             ax=ax1,
+             volume=False)
+    
+    # Add VWAP line
+    ax1.axhline(y=vwap, color='blue', linestyle='--', label='VWAP')
+    
+    # Add high/low levels
+    ax1.axhline(y=high, color='green', linestyle=':', label='High')
+    ax1.axhline(y=low, color='red', linestyle=':', label='Low')
+    
+    # Add current price
+    ax1.axhline(y=current_price, color='purple', linestyle='-', label='Current Price')
+    
+    # Add legend
+    ax1.legend()
+    
+    # Format x-axis
+    ax1.xaxis.set_major_formatter(mdates.DateFormatter('%H:%M'))
+    plt.xticks(rotation=45)
+    
+    # Plot volume
+    ax2.bar(df.index, df['volume'], color='gray', alpha=0.5)
+    ax2.set_ylabel('Volume')
+    ax2.xaxis.set_major_formatter(mdates.DateFormatter('%H:%M'))
+    plt.xticks(rotation=45)
+    
+    # Adjust layout
+    plt.tight_layout()
+    
+    # Save the figure
+    filename = f'{symbol.lower()}_chart.png'
+    plt.savefig(filename)
+    plt.close()
+    
+    return filename
+
+def analyze_token(symbol, df, vwap, high, low, current_price):
+    """Analyze token's trading conditions and provide insights"""
+    analysis = {
+        'trend': '',
+        'strength': '',
+        'setup': '',
+        'suggestion': ''
+    }
+    
+    # Calculate basic metrics
+    price_change = ((current_price - df['open'].iloc[0]) / df['open'].iloc[0]) * 100
+    volatility = (df['high'].max() - df['low'].min()) / df['low'].min() * 100
+    
+    # Determine trend
+    if current_price > vwap:
+        analysis['trend'] = 'BULLISH'
+    else:
+        analysis['trend'] = 'BEARISH'
+    
+    # Determine strength
+    if abs(price_change) > 5:
+        analysis['strength'] = 'STRONG'
+    else:
+        analysis['strength'] = 'MODERATE'
+    
+    # Determine setup
+    if current_price > high:
+        analysis['setup'] = 'BREAKOUT'
+    elif current_price < low:
+        analysis['setup'] = 'BREAKDOWN'
+    else:
+        analysis['setup'] = 'RANGE'
+    
+    # Generate trading suggestion
+    if analysis['setup'] == 'BREAKOUT':
+        analysis['suggestion'] = f"Consider long positions with stop loss below {low:.2f}"
+    elif analysis['setup'] == 'BREAKDOWN':
+        analysis['suggestion'] = f"Consider short positions with stop loss above {high:.2f}"
+    else:
+        analysis['suggestion'] = f"Range trading between {low:.2f} and {high:.2f}"
+    
+    return analysis
+
 def build_message() -> str:
     today = datetime.date.today().isoformat()
     lines = [f"*London prep*  {today} 06:30 UTC\n"]
 
     data = get_coin_data(TOKENS)
     vwap_data = {}
+    chart_files = []
     
     logging.debug("Starting VWAP calculations for all tokens")
     for token in TOKENS:
         try:
-            logging.debug(f"Processing VWAP for {token}")
-            vwap = get_vwap(token)
+            logging.debug(f"Processing {token}")
+            coin_id = SYMBOL_MAP[token]
+            
+            # Get OHLCV data
+            df = fetch_ohlcv(coin_id, days=1)
+            if df is None or df.empty:
+                continue
+                
+            # Calculate VWAP
+            vwap = calculate_vwap(df)
             vwap_data[token] = vwap
+            
+            # Get current price and high/low
+            current_price = data[token]['price']
+            high = data[token]['high']
+            low = data[token]['low']
+            
+            # Create chart
+            chart_file = create_price_chart(token, df, vwap, high, low, current_price)
+            chart_files.append(chart_file)
+            
+            # Analyze token
+            analysis = analyze_token(token, df, vwap, high, low, current_price)
+            
+            # Build message
+            emoji, percent = get_movement_emoji(current_price, low, high)
+            percent_text = f"{percent}%" if percent is not None else "N/A"
+            
+            lines.append(
+                f"*{token}*  {emoji} ({percent_text})\n"
+                f"`Asia:`  {low:.1f}–{high:.1f}\n"
+                f"`Price:`  ${current_price:.1f}\n"
+                f"`VWAP:`  {vwap:.1f}\n"
+                f"`Trend:`  {analysis['trend']} ({analysis['strength']})\n"
+                f"`Setup:`  {analysis['setup']}\n"
+                f"`Suggestion:`  {analysis['suggestion']}\n"
+            )
+            
         except Exception as e:
-            logging.error(f"VWAP error for {token}: {e}")
-            vwap_data[token] = None
-
-    for token in TOKENS:
-        c = data.get(token)
-        if not c or c["price"] is None or c["high"] is None or c["low"] is None:
-            lines.append(f"`{token}`  ⚠️ pair missing or API error")
+            logging.error(f"Error processing {token}: {e}")
             continue
-
-        emoji, percent = get_movement_emoji(c['price'], c['low'], c['high'])
-        percent_text = f"{percent}%" if percent is not None else "N/A"
-        vwap = vwap_data[token]
-        if vwap is None:
-            vwap_str = "N/A"
-            vwap_emoji = ""
-        else:
-            vwap_emoji = "🟢" if c['price'] > vwap else "🔴"
-            vwap_str = f"{vwap_emoji} {vwap:.1f}"
-
-        lines.append(
-            f"*{token}*  {emoji} ({percent_text})\n"
-            f"`Asia:`  {c['low']:.1f}–{c['high']:.1f}\n"
-            f"`Price:`  ${c['price']:.1f}\n"
-            f"`VWAP:`  {vwap_str}\n"
-        )
-    return "\n".join(lines)
+            
+    return "\n".join(lines), chart_files
 
 def main():
     from telegram import Bot
@@ -231,10 +324,18 @@ def main():
     CHAT  = os.environ["TELEGRAM_CHAT"]
     bot   = Bot(TOKEN)
 
-    text = build_message()
+    text, chart_files = build_message()
+    
+    # Send text message
     bot.send_message(chat_id=CHAT, text=text, parse_mode='Markdown')
     
-    # Send debug log to Telegram if it exists
+    # Send charts
+    for chart_file in chart_files:
+        with open(chart_file, 'rb') as f:
+            bot.send_photo(chat_id=CHAT, photo=f)
+        os.remove(chart_file)  # Clean up
+    
+    # Send debug log if it exists
     if os.path.exists(log_file):
         with open(log_file, 'rb') as f:
             bot.send_document(chat_id=CHAT, document=f, caption="VWAP Debug Log")
