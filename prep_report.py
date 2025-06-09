@@ -19,14 +19,24 @@ COINGECKO_MARKET_URL = "https://api.coingecko.com/api/v3/coins/markets"
 
 # --- VWAP-laskenta ---
 def fetch_ohlcv(symbol='BTCUSDT', interval='15m', limit=96):
+    # Using the exact same URL and parameters as the working curl command
     url = "https://api.binance.com/api/v3/klines"
-    params = {'symbol': symbol, 'interval': interval, 'limit': limit}
+    params = {
+        'symbol': symbol,
+        'interval': interval,
+        'limit': limit
+    }
     print(f"\n[DEBUG] Fetching OHLCV for {symbol}")
     print(f"[DEBUG] URL: {url}")
     print(f"[DEBUG] Params: {params}")
     
     try:
-        resp = requests.get(url, params=params, timeout=10)
+        # Add headers to mimic curl request
+        headers = {
+            'User-Agent': 'Mozilla/5.0',
+            'Accept': 'application/json'
+        }
+        resp = requests.get(url, params=params, headers=headers, timeout=10)
         print(f"[DEBUG] Status code: {resp.status_code}")
         
         if resp.status_code != 200:
@@ -36,6 +46,7 @@ def fetch_ohlcv(symbol='BTCUSDT', interval='15m', limit=96):
             
         data = resp.json()
         print(f"[DEBUG] Received {len(data)} rows of data")
+        print(f"[DEBUG] First row sample: {data[0] if data else 'No data'}")
         
         if not data:
             print(f"[ERROR] No data received for {symbol}")
@@ -44,6 +55,7 @@ def fetch_ohlcv(symbol='BTCUSDT', interval='15m', limit=96):
         ohlcv = []
         for row in data:
             try:
+                # Binance API returns: [timestamp, open, high, low, close, volume, ...]
                 ohlcv.append({
                     'high': float(row[2]),
                     'low': float(row[3]),
@@ -56,6 +68,8 @@ def fetch_ohlcv(symbol='BTCUSDT', interval='15m', limit=96):
                 continue
                 
         print(f"[DEBUG] Successfully parsed {len(ohlcv)} rows")
+        if ohlcv:
+            print(f"[DEBUG] First parsed row: {ohlcv[0]}")
         return ohlcv
         
     except requests.exceptions.RequestException as e:
