@@ -19,57 +19,55 @@ COINGECKO_MARKET_URL = "https://api.coingecko.com/api/v3/coins/markets"
 
 # --- VWAP-laskenta ---
 def fetch_ohlcv(symbol='BTCUSDT', interval='15m', limit=96):
-    # Using the exact same URL and parameters as the working curl command
-    url = "https://api.binance.com/api/v3/klines"
-    params = {
-        'symbol': symbol,
-        'interval': interval,
-        'limit': limit
-    }
+    # Using the exact same URL format as the working curl command
+    url = f"https://api.binance.com/api/v3/klines?symbol={symbol}&interval={interval}&limit={limit}"
     print(f"\n[DEBUG] Fetching OHLCV for {symbol}")
-    print(f"[DEBUG] URL: {url}")
-    print(f"[DEBUG] Params: {params}")
+    print(f"[DEBUG] Full URL: {url}")
     
     try:
-        # Add headers to mimic curl request
         headers = {
             'User-Agent': 'Mozilla/5.0',
             'Accept': 'application/json'
         }
-        resp = requests.get(url, params=params, headers=headers, timeout=10)
+        print("[DEBUG] Making request...")
+        resp = requests.get(url, headers=headers, timeout=10)
         print(f"[DEBUG] Status code: {resp.status_code}")
+        print(f"[DEBUG] Response headers: {dict(resp.headers)}")
         
         if resp.status_code != 200:
             print(f"[ERROR] Bad status code: {resp.status_code}")
-            print(f"[ERROR] Response: {resp.text}")
+            print(f"[ERROR] Response text: {resp.text}")
             return []
             
+        print("[DEBUG] Parsing JSON response...")
         data = resp.json()
         print(f"[DEBUG] Received {len(data)} rows of data")
-        print(f"[DEBUG] First row sample: {data[0] if data else 'No data'}")
         
         if not data:
             print(f"[ERROR] No data received for {symbol}")
             return []
             
+        print(f"[DEBUG] First row raw data: {data[0]}")
+        
         ohlcv = []
-        for row in data:
+        for i, row in enumerate(data):
             try:
                 # Binance API returns: [timestamp, open, high, low, close, volume, ...]
-                ohlcv.append({
+                parsed_row = {
                     'high': float(row[2]),
                     'low': float(row[3]),
                     'close': float(row[4]),
                     'volume': float(row[5])
-                })
+                }
+                ohlcv.append(parsed_row)
+                if i < 2:  # Print first two parsed rows
+                    print(f"[DEBUG] Parsed row {i}: {parsed_row}")
             except (IndexError, ValueError) as e:
-                print(f"[ERROR] Failed to parse row: {row}")
+                print(f"[ERROR] Failed to parse row {i}: {row}")
                 print(f"[ERROR] Error: {e}")
                 continue
                 
         print(f"[DEBUG] Successfully parsed {len(ohlcv)} rows")
-        if ohlcv:
-            print(f"[DEBUG] First parsed row: {ohlcv[0]}")
         return ohlcv
         
     except requests.exceptions.RequestException as e:
@@ -77,6 +75,7 @@ def fetch_ohlcv(symbol='BTCUSDT', interval='15m', limit=96):
         return []
     except Exception as e:
         print(f"[ERROR] Unexpected error in fetch_ohlcv for {symbol}: {e}")
+        print(f"[ERROR] Error type: {type(e)}")
         return []
 
 def calculate_vwap(ohlcv):
@@ -95,8 +94,11 @@ def calculate_vwap(ohlcv):
             total_pv += price * vol
             total_vol += vol
             
-            if i < 3:  # Print first 3 rows for debugging
-                print(f"[DEBUG] Row {i}: price={price:.2f}, vol={vol:.2f}")
+            if i < 3:  # Print first 3 calculations
+                print(f"[DEBUG] Row {i} calculation:")
+                print(f"  Price: {price:.2f} = ({k['high']:.2f} + {k['low']:.2f} + {k['close']:.2f}) / 3")
+                print(f"  Volume: {vol:.2f}")
+                print(f"  Price * Volume: {price * vol:.2f}")
                 
         except KeyError as e:
             print(f"[ERROR] Missing key in data: {e}")
@@ -108,8 +110,10 @@ def calculate_vwap(ohlcv):
         return None
         
     vwap = total_pv / total_vol
-    print(f"[DEBUG] VWAP calculated: {vwap:.2f}")
-    print(f"[DEBUG] Total volume: {total_vol:.2f}")
+    print(f"[DEBUG] Final VWAP calculation:")
+    print(f"  Total price * volume: {total_pv:.2f}")
+    print(f"  Total volume: {total_vol:.2f}")
+    print(f"  VWAP: {vwap:.2f}")
     return vwap
 
 def get_vwap(symbol='BTCUSDT'):
