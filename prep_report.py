@@ -3,6 +3,8 @@ import requests
 import logging
 import os
 import pandas as pd
+import matplotlib
+matplotlib.use('Agg')  # Set the backend to non-interactive 'Agg'
 import matplotlib.pyplot as plt
 import mplfinance as mpf
 from matplotlib.dates import DateFormatter
@@ -18,6 +20,22 @@ logging.basicConfig(
         logging.StreamHandler()  # Also print to console
     ]
 )
+
+# Test matplotlib functionality
+def test_matplotlib():
+    try:
+        logging.info("Testing matplotlib functionality...")
+        plt.figure(figsize=(10, 6))
+        plt.plot([1, 2, 3, 4], [1, 4, 2, 3])
+        plt.title("Test Plot")
+        test_file = "matplotlib_test.png"
+        plt.savefig(test_file)
+        plt.close()
+        logging.info(f"Test plot saved to {test_file}")
+        return test_file
+    except Exception as e:
+        logging.error(f"Matplotlib test failed: {str(e)}")
+        return None
 
 # Mappaukset
 SYMBOL_MAP = {
@@ -341,6 +359,21 @@ def main():
         logging.info("Testing bot connection...")
         bot_info = bot.get_me()
         logging.info(f"Bot connected successfully. Bot info: {bot_info}")
+        
+        # Test matplotlib
+        test_plot = test_matplotlib()
+        if test_plot:
+            logging.info("Sending matplotlib test plot...")
+            with open(test_plot, 'rb') as f:
+                test_photo = bot.send_photo(
+                    chat_id=CHAT,
+                    photo=f,
+                    caption="Matplotlib Test Plot"
+                )
+            logging.info(f"Test plot sent successfully. Message ID: {test_photo.message_id}")
+            os.remove(test_plot)
+        else:
+            logging.error("Failed to create test plot")
         
         # Send test message
         logging.info(f"Sending test message to chat {CHAT}...")
