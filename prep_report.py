@@ -248,11 +248,13 @@ def build_message() -> str:
     return "\n".join(lines), chart_files
 
 def main():
-    from telegram import Bot
+    from telegram import Bot, Update
+    from telegram.ext import Application, CommandHandler, ContextTypes
     from telegram.error import TelegramError
     import os
     import sys
     import asyncio
+    from bias_tracker import BiasTracker
 
     TOKEN = os.environ.get("TELEGRAM_TOKEN")
     CHAT = os.environ.get("TELEGRAM_CHAT")
@@ -260,24 +262,93 @@ def main():
     if not TOKEN or not CHAT:
         print("ERROR: Missing TELEGRAM_TOKEN or TELEGRAM_CHAT")
         sys.exit(1)
-        
-    async def send_report():
+
+    bias_tracker = BiasTracker()
+
+    async def bias_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         try:
-            bot = Bot(token=TOKEN)
-            message, _ = build_message()
-            await bot.send_message(
-                chat_id=CHAT,
-                text=message,
-                parse_mode='Markdown'
-            )
-        except TelegramError as e:
-            print(f"TELEGRAM ERROR: {str(e)}")
-            sys.exit(1)
+            # Format: /bias BTC bullish
+            args = context.args
+            if len(args) != 2:
+                await update.message.reply_text("Usage: /bias <token> <bullish/bearish>")
+                return
+
+            token = args[0].upper()
+            bias = args[1].lower()
+
+            if token not in TOKENS:
+                await update.message.reply_text(f"Invalid token. Use one of: {', '.join(TOKENS)}")
+                return
+
+            if bias not in ['bullish', 'bearish']:
+                await update.message.reply_text("Bias must be either 'bullish' or 'bearish'")
+                return
+
+            bias_tracker.add_bias(token, bias, update.effective_user.id)
+            await update.message.reply_text(f"Added {bias} bias for {token}")
+
         except Exception as e:
-            print(f"UNEXPECTED ERROR: {str(e)}")
+            await update.message.reply_text(f"Error: {str(e)}")
+
+    async def setup_score_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+        try:
+            # Format: /setup_score SOL 8/10
+            args = context.args
+            if len(args) != 2:
+                await update.message.reply_text("Usage: /setup_score <token> <score>")
+                return
+
+            token = args[0].upper()
+            score = args[1]
+
+            if token not in TOKENS:
+                await update.message.reply_text(f"Invalid token. Use one of: {', '.join(TOKENS)}")
+                return
+
+            if not score.endswith('/10'):
+                await update.message.reply_text("Score must be in format X/10")
+                return
+
+            try:
+                score_num = int(score.split('/')[0])
+                if not (0 <= score_num <= 10):
+                    raise ValueError
+            except ValueError:
+                await update.message.reply_text("Score must be a number between 0 and 10")
+                return
+
+            bias_tracker.add_setup_score(token, score, update.effective_user.id)
+            await update.message.reply_text(f"Added setup score {score} for {token}")
+
+        except Exception as e:
+            await update.message.reply_text(f"Error: {str(e)}")
+
+    async def weekly_summary_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+        try:
+            summary = bias_tracker.format_weekly_summary()
+            await update.message.reply_text(summary, parse_mode='Markdown')
+        except Exception as e:
+            await update.message.reply_text(f"Error: {str(e)}")
+
+    async def start_bot():
+        try:
+            application = Application.builder().token(TOKEN).build()
+            
+            # Add command handlers
+            application.add_handler(CommandHandler("bias", bias_command))
+            application.add_handler(CommandHandler("setup_score", setup_score_command))
+            application.add_handler(CommandHandler("weekly_summary", weekly_summary_command))
+            
+            # Start the bot
+            await application.initialize()
+            await application.start()
+            await application.run_polling()
+            
+        except Exception as e:
+            print(f"Error starting bot: {str(e)}")
             sys.exit(1)
 
-    asyncio.run(send_report())
+    asyncio.run(start_bot())
 
 if __name__ == "__main__":
     main()
