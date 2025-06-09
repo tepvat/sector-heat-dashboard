@@ -1,29 +1,24 @@
-import datetime, requests
+import datetime
+import requests
 
-# Mappaukset symboleihin
+# Mappaukset
 SYMBOL_MAP = {
     "BTC": "bitcoin",
     "ETH": "ethereum",
     "SOL": "solana",
     "BNB": "binancecoin",
 }
-
 SYMBOL_TO_BINANCE = {
     "BTC": "BTCUSDT",
     "ETH": "ETHUSDT",
     "SOL": "SOLUSDT",
     "BNB": "BNBUSDT"
 }
-
 TOKENS = ["BTC", "ETH", "SOL", "BNB"]
-
 COINGECKO_MARKET_URL = "https://api.coingecko.com/api/v3/coins/markets"
 
 # --- VWAP-laskenta ---
 def fetch_ohlcv(symbol='BTCUSDT', interval='15m', limit=96):
-    """
-    Hakee Binance API:sta OHLCV-datan (default: viimeisen 24h, 15min kynttilät = 96 kpl)
-    """
     url = "https://api.binance.com/api/v3/klines"
     params = {'symbol': symbol, 'interval': interval, 'limit': limit}
     resp = requests.get(url, params=params, timeout=10)
@@ -51,7 +46,7 @@ def calculate_vwap(ohlcv):
     return total_pv / total_vol
 
 def get_vwap(symbol='BTCUSDT'):
-    ohlcv = fetch_ohlcv(symbol, interval='15m', limit=96)  # viimeisen 24h (15m kynttilät)
+    ohlcv = fetch_ohlcv(symbol, interval='15m', limit=96)
     return calculate_vwap(ohlcv)
 
 # --- Hinta- ja range-tiedot ---
@@ -69,7 +64,6 @@ def get_coin_data(tokens):
         response = requests.get(COINGECKO_MARKET_URL, params=params, timeout=10)
         response.raise_for_status()
         data = response.json()
-        # Palautetaan dictionary: {symbol: {price, high, low}}
         result = {}
         for coin in data:
             symbol = [k for k, v in SYMBOL_MAP.items() if v == coin["id"]][0]
@@ -88,7 +82,7 @@ def get_movement_emoji(current, low, high):
     try:
         ratio = (current - low) / (high - low)
     except ZeroDivisionError:
-        return "⚪️", None  # Ei tietoa
+        return "⚪️", None
     percent = int(ratio * 100)
     if ratio >= 0.8:
         emoji = "🟢⬆️"
@@ -104,8 +98,6 @@ def build_message() -> str:
     lines = [f"*London prep*  {today} 06:30 UTC\n"]
 
     data = get_coin_data(TOKENS)
-
-    # Haetaan VWAPit kaikille tokeneille
     vwap_data = {}
     for token in TOKENS:
         try:
@@ -138,7 +130,6 @@ def build_message() -> str:
             f"`Price:`  ${c['price']:.1f}\n"
             f"`VWAP:`  {vwap_str}\n"
         )
-
     return "\n".join(lines)
 
 def main():
@@ -154,4 +145,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-    
