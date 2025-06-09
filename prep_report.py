@@ -360,73 +360,13 @@ def main():
         bot_info = bot.get_me()
         logging.info(f"Bot connected successfully. Bot info: {bot_info}")
         
-        # Test matplotlib
-        test_plot = test_matplotlib()
-        if test_plot:
-            logging.info("Sending matplotlib test plot...")
-            with open(test_plot, 'rb') as f:
-                test_photo = bot.send_photo(
-                    chat_id=CHAT,
-                    photo=f,
-                    caption="Matplotlib Test Plot"
-                )
-            logging.info(f"Test plot sent successfully. Message ID: {test_photo.message_id}")
-            os.remove(test_plot)
-        else:
-            logging.error("Failed to create test plot")
-        
-        # Send test message
-        logging.info(f"Sending test message to chat {CHAT}...")
+        # Send simple test message
+        logging.info(f"Sending simple test message to chat {CHAT}...")
         test_message = bot.send_message(
             chat_id=CHAT,
-            text="🤖 Bot test message - If you see this, the bot is working!"
+            text="🤖 Simple test message"
         )
         logging.info(f"Test message sent successfully. Message ID: {test_message.message_id}")
-        
-        # Build and send main message
-        logging.info("Building main message...")
-        text, chart_files = build_message()
-        logging.info(f"Message built successfully, length: {len(text)}")
-        logging.info(f"Generated {len(chart_files)} chart files")
-        
-        # Send text message
-        logging.info("Sending main text message...")
-        main_message = bot.send_message(
-            chat_id=CHAT,
-            text=text,
-            parse_mode='Markdown'
-        )
-        logging.info(f"Main message sent successfully. Message ID: {main_message.message_id}")
-        
-        # Send charts
-        for chart_file in chart_files:
-            logging.info(f"Sending chart file: {chart_file}")
-            try:
-                with open(chart_file, 'rb') as f:
-                    photo_message = bot.send_photo(
-                        chat_id=CHAT,
-                        photo=f,
-                        caption=f"Chart for {chart_file.split('_')[0].upper()}"
-                    )
-                logging.info(f"Chart {chart_file} sent successfully. Message ID: {photo_message.message_id}")
-                os.remove(chart_file)
-                logging.info(f"Chart file {chart_file} removed")
-            except Exception as e:
-                logging.error(f"Error sending chart {chart_file}: {str(e)}")
-        
-        # Send debug log
-        if os.path.exists(log_file):
-            logging.info("Sending debug log...")
-            try:
-                with open(log_file, 'rb') as f:
-                    log_message = bot.send_document(
-                        chat_id=CHAT,
-                        document=f,
-                        caption="VWAP Debug Log"
-                    )
-                logging.info(f"Debug log sent successfully. Message ID: {log_message.message_id}")
-            except Exception as e:
-                logging.error(f"Error sending debug log: {str(e)}")
             
     except TelegramError as e:
         logging.error(f"Telegram error: {str(e)}")
