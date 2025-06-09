@@ -252,6 +252,7 @@ def main():
     from telegram.error import TelegramError
     import os
     import sys
+    import asyncio
 
     # Print all environment variables (except token)
     print("Environment variables:")
@@ -269,33 +270,37 @@ def main():
         print("ERROR: Missing TELEGRAM_TOKEN or TELEGRAM_CHAT")
         sys.exit(1)
         
-    try:
-        print("\nInitializing bot...")
-        bot = Bot(token=TOKEN)
-        
-        print("Testing bot connection...")
-        bot_info = bot.get_me()
-        print(f"Bot connected: {bot_info}")
-        
-        print("\nSending test message...")
-        message = bot.send_message(
-            chat_id=CHAT,
-            text="🤖 Test message - If you see this, the bot is working!"
-        )
-        print(f"Message sent successfully! Message ID: {message.message_id}")
-        
-    except TelegramError as e:
-        print(f"\nTELEGRAM ERROR: {str(e)}")
-        print(f"Error type: {type(e)}")
-        import traceback
-        print(f"Traceback: {traceback.format_exc()}")
-        sys.exit(1)
-    except Exception as e:
-        print(f"\nUNEXPECTED ERROR: {str(e)}")
-        print(f"Error type: {type(e)}")
-        import traceback
-        print(f"Traceback: {traceback.format_exc()}")
-        sys.exit(1)
+    async def send_test_message():
+        try:
+            print("\nInitializing bot...")
+            bot = Bot(token=TOKEN)
+            
+            print("Testing bot connection...")
+            bot_info = await bot.get_me()
+            print(f"Bot connected: {bot_info}")
+            
+            print("\nSending test message...")
+            message = await bot.send_message(
+                chat_id=CHAT,
+                text="🤖 Test message - If you see this, the bot is working!"
+            )
+            print(f"Message sent successfully! Message ID: {message.message_id}")
+            
+        except TelegramError as e:
+            print(f"\nTELEGRAM ERROR: {str(e)}")
+            print(f"Error type: {type(e)}")
+            import traceback
+            print(f"Traceback: {traceback.format_exc()}")
+            sys.exit(1)
+        except Exception as e:
+            print(f"\nUNEXPECTED ERROR: {str(e)}")
+            print(f"Error type: {type(e)}")
+            import traceback
+            print(f"Traceback: {traceback.format_exc()}")
+            sys.exit(1)
+
+    # Run the async function
+    asyncio.run(send_test_message())
 
 if __name__ == "__main__":
     main()
