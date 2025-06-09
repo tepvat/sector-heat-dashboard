@@ -249,30 +249,53 @@ def build_message() -> str:
 
 def main():
     from telegram import Bot
+    from telegram.error import TelegramError
     import os
+    import sys
 
-    TOKEN = os.environ["TELEGRAM_TOKEN"]
-    CHAT  = os.environ["TELEGRAM_CHAT"]
-    bot   = Bot(TOKEN)
+    # Print all environment variables (except token)
+    print("Environment variables:")
+    for key, value in os.environ.items():
+        if key != "TELEGRAM_TOKEN":
+            print(f"{key}: {value}")
 
-    text, chart_files = build_message()
+    TOKEN = os.environ.get("TELEGRAM_TOKEN")
+    CHAT = os.environ.get("TELEGRAM_CHAT")
     
-    # Send text message
-    bot.send_message(chat_id=CHAT, text=text, parse_mode='Markdown')
+    print(f"\nToken exists: {bool(TOKEN)}")
+    print(f"Chat ID exists: {bool(CHAT)}")
     
-    # Send charts
-    for chart_file in chart_files:
-        try:
-            with open(chart_file, 'rb') as f:
-                bot.send_photo(chat_id=CHAT, photo=f)
-            os.remove(chart_file)  # Clean up
-        except Exception as e:
-            logging.error(f"Error sending chart {chart_file}: {e}")
-    
-    # Send debug log if it exists
-    if os.path.exists(log_file):
-        with open(log_file, 'rb') as f:
-            bot.send_document(chat_id=CHAT, document=f, caption="VWAP Debug Log")
+    if not TOKEN or not CHAT:
+        print("ERROR: Missing TELEGRAM_TOKEN or TELEGRAM_CHAT")
+        sys.exit(1)
+        
+    try:
+        print("\nInitializing bot...")
+        bot = Bot(token=TOKEN)
+        
+        print("Testing bot connection...")
+        bot_info = bot.get_me()
+        print(f"Bot connected: {bot_info}")
+        
+        print("\nSending test message...")
+        message = bot.send_message(
+            chat_id=CHAT,
+            text="🤖 Test message - If you see this, the bot is working!"
+        )
+        print(f"Message sent successfully! Message ID: {message.message_id}")
+        
+    except TelegramError as e:
+        print(f"\nTELEGRAM ERROR: {str(e)}")
+        print(f"Error type: {type(e)}")
+        import traceback
+        print(f"Traceback: {traceback.format_exc()}")
+        sys.exit(1)
+    except Exception as e:
+        print(f"\nUNEXPECTED ERROR: {str(e)}")
+        print(f"Error type: {type(e)}")
+        import traceback
+        print(f"Traceback: {traceback.format_exc()}")
+        sys.exit(1)
 
 if __name__ == "__main__":
     main()
