@@ -270,7 +270,7 @@ def main():
         print("ERROR: Missing TELEGRAM_TOKEN or TELEGRAM_CHAT")
         sys.exit(1)
         
-    async def test_coin_data():
+    async def test_chart():
         try:
             print("\nInitializing bot...")
             bot = Bot(token=TOKEN)
@@ -306,6 +306,15 @@ def main():
             high = data[test_token]['high']
             low = data[test_token]['low']
             
+            # Create chart
+            print("\nCreating chart...")
+            chart_file = create_price_chart(test_token, df, vwap, high, low, current_price)
+            if not chart_file:
+                print("Failed to create chart")
+                return
+                
+            print(f"Chart saved as {chart_file}")
+            
             # Send results to Telegram
             message = (
                 f"*Test Results for {test_token}*\n\n"
@@ -315,12 +324,22 @@ def main():
                 f"VWAP: ${vwap:.2f}\n"
             )
             
+            # Send message
             await bot.send_message(
                 chat_id=CHAT,
                 text=message,
                 parse_mode='Markdown'
             )
-            print("Results sent to Telegram")
+            
+            # Send chart
+            with open(chart_file, 'rb') as chart:
+                await bot.send_photo(
+                    chat_id=CHAT,
+                    photo=chart,
+                    caption=f"{test_token} Price Chart"
+                )
+            
+            print("Results and chart sent to Telegram")
             
         except TelegramError as e:
             print(f"\nTELEGRAM ERROR: {str(e)}")
@@ -336,7 +355,7 @@ def main():
             sys.exit(1)
 
     # Run the async function
-    asyncio.run(test_coin_data())
+    asyncio.run(test_chart())
 
 if __name__ == "__main__":
     main()
