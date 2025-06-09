@@ -253,6 +253,7 @@ def main():
     import os
     import sys
     import asyncio
+    import traceback
 
     print("\n=== Starting script ===")
     
@@ -267,12 +268,15 @@ def main():
     
     print(f"\nToken exists: {bool(TOKEN)}")
     print(f"Chat ID exists: {bool(CHAT)}")
+    print(f"Token length: {len(TOKEN) if TOKEN else 0}")
+    print(f"Chat ID: {CHAT}")
     
     if not TOKEN or not CHAT:
         print("ERROR: Missing TELEGRAM_TOKEN or TELEGRAM_CHAT")
         sys.exit(1)
         
     async def test_chart_only():
+        bot = None
         try:
             print("\n=== Testing Chart Creation ===")
             test_token = "BTC"
@@ -321,29 +325,51 @@ def main():
             # Send only the chart
             print("\n=== Sending Chart ===")
             print("Initializing bot...")
-            bot = Bot(token=TOKEN)
+            try:
+                bot = Bot(token=TOKEN)
+                print("Bot initialized successfully")
+                
+                # Test bot connection
+                print("Testing bot connection...")
+                bot_info = await bot.get_me()
+                print(f"Bot info: {bot_info}")
+                
+                print("Sending chart...")
+                if not os.path.exists(chart_file):
+                    print(f"ERROR: Chart file {chart_file} does not exist!")
+                    return
+                    
+                print(f"Opening chart file {chart_file}...")
+                with open(chart_file, 'rb') as chart:
+                    print("File opened successfully")
+                    print("Sending photo to Telegram...")
+                    await bot.send_photo(
+                        chat_id=CHAT,
+                        photo=chart,
+                        caption=f"{test_token} Price Chart"
+                    )
+                print("Chart sent successfully!")
+                
+            except TelegramError as e:
+                print(f"\nTELEGRAM ERROR: {str(e)}")
+                print(f"Error type: {type(e)}")
+                print(f"Traceback: {traceback.format_exc()}")
+                return
+            except Exception as e:
+                print(f"\nUNEXPECTED ERROR in Telegram operations: {str(e)}")
+                print(f"Error type: {type(e)}")
+                print(f"Traceback: {traceback.format_exc()}")
+                return
             
-            print("Sending chart...")
-            with open(chart_file, 'rb') as chart:
-                await bot.send_photo(
-                    chat_id=CHAT,
-                    photo=chart,
-                    caption=f"{test_token} Price Chart"
-                )
-            print("Chart sent successfully!")
-            
-        except TelegramError as e:
-            print(f"\nTELEGRAM ERROR: {str(e)}")
-            print(f"Error type: {type(e)}")
-            import traceback
-            print(f"Traceback: {traceback.format_exc()}")
-            sys.exit(1)
         except Exception as e:
             print(f"\nUNEXPECTED ERROR: {str(e)}")
             print(f"Error type: {type(e)}")
-            import traceback
             print(f"Traceback: {traceback.format_exc()}")
             sys.exit(1)
+        finally:
+            if bot:
+                print("Closing bot connection...")
+                await bot.close()
 
     print("\n=== Running async function ===")
     asyncio.run(test_chart_only())
