@@ -318,53 +318,90 @@ def build_message() -> str:
 
 def main():
     from telegram import Bot
+    from telegram.error import TelegramError
     import os
 
     TOKEN = os.environ.get("TELEGRAM_TOKEN")
     CHAT = os.environ.get("TELEGRAM_CHAT")
     
-    logging.info(f"Starting bot with TOKEN: {TOKEN[:5]}... and CHAT: {CHAT}")
+    logging.info("Environment variables:")
+    logging.info(f"TELEGRAM_TOKEN exists: {bool(TOKEN)}")
+    logging.info(f"TELEGRAM_CHAT exists: {bool(CHAT)}")
     
     if not TOKEN or not CHAT:
         logging.error("Missing TELEGRAM_TOKEN or TELEGRAM_CHAT environment variables")
         return
         
     try:
-        bot = Bot(TOKEN)
-        logging.info("Bot initialized successfully")
+        # Initialize bot with more detailed error handling
+        logging.info("Initializing Telegram bot...")
+        bot = Bot(token=TOKEN)
         
-        # Send test message first
-        logging.info("Sending test message...")
-        bot.send_message(chat_id=CHAT, text="🤖 Bot starting up...")
-        logging.info("Test message sent successfully")
+        # Test bot connection
+        logging.info("Testing bot connection...")
+        bot_info = bot.get_me()
+        logging.info(f"Bot connected successfully. Bot info: {bot_info}")
         
+        # Send test message
+        logging.info(f"Sending test message to chat {CHAT}...")
+        test_message = bot.send_message(
+            chat_id=CHAT,
+            text="🤖 Bot test message - If you see this, the bot is working!"
+        )
+        logging.info(f"Test message sent successfully. Message ID: {test_message.message_id}")
+        
+        # Build and send main message
+        logging.info("Building main message...")
         text, chart_files = build_message()
         logging.info(f"Message built successfully, length: {len(text)}")
         logging.info(f"Generated {len(chart_files)} chart files")
         
         # Send text message
-        logging.info("Attempting to send text message...")
-        bot.send_message(chat_id=CHAT, text=text, parse_mode='Markdown')
-        logging.info("Text message sent successfully")
+        logging.info("Sending main text message...")
+        main_message = bot.send_message(
+            chat_id=CHAT,
+            text=text,
+            parse_mode='Markdown'
+        )
+        logging.info(f"Main message sent successfully. Message ID: {main_message.message_id}")
         
         # Send charts
         for chart_file in chart_files:
             logging.info(f"Sending chart file: {chart_file}")
-            with open(chart_file, 'rb') as f:
-                bot.send_photo(chat_id=CHAT, photo=f)
-            logging.info(f"Chart {chart_file} sent successfully")
-            os.remove(chart_file)  # Clean up
-            logging.info(f"Chart file {chart_file} removed")
+            try:
+                with open(chart_file, 'rb') as f:
+                    photo_message = bot.send_photo(
+                        chat_id=CHAT,
+                        photo=f,
+                        caption=f"Chart for {chart_file.split('_')[0].upper()}"
+                    )
+                logging.info(f"Chart {chart_file} sent successfully. Message ID: {photo_message.message_id}")
+                os.remove(chart_file)
+                logging.info(f"Chart file {chart_file} removed")
+            except Exception as e:
+                logging.error(f"Error sending chart {chart_file}: {str(e)}")
         
-        # Send debug log if it exists
+        # Send debug log
         if os.path.exists(log_file):
             logging.info("Sending debug log...")
-            with open(log_file, 'rb') as f:
-                bot.send_document(chat_id=CHAT, document=f, caption="VWAP Debug Log")
-            logging.info("Debug log sent successfully")
+            try:
+                with open(log_file, 'rb') as f:
+                    log_message = bot.send_document(
+                        chat_id=CHAT,
+                        document=f,
+                        caption="VWAP Debug Log"
+                    )
+                logging.info(f"Debug log sent successfully. Message ID: {log_message.message_id}")
+            except Exception as e:
+                logging.error(f"Error sending debug log: {str(e)}")
             
+    except TelegramError as e:
+        logging.error(f"Telegram error: {str(e)}")
+        logging.error(f"Error type: {type(e)}")
+        import traceback
+        logging.error(f"Traceback: {traceback.format_exc()}")
     except Exception as e:
-        logging.error(f"Error in main: {str(e)}")
+        logging.error(f"Unexpected error: {str(e)}")
         logging.error(f"Error type: {type(e)}")
         import traceback
         logging.error(f"Traceback: {traceback.format_exc()}")
