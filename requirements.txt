@@ -5,4 +5,4 @@ python-telegram-bot==20.7
 pyyaml          # basket
 matplotlib==3.8.2
 mplfinance==0.12.10b0
-TA-Lib==0.4.28
+ta==0.11.0

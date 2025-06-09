@@ -10,7 +10,7 @@ import matplotlib.pyplot as plt
 import mplfinance as mpf
 from matplotlib.dates import DateFormatter
 import matplotlib.dates as mdates
-import talib
+import ta
 
 # Set up logging
 log_file = 'vwap_debug.log'
@@ -218,17 +218,17 @@ def calculate_technical_indicators(df):
     """Calculate technical indicators for strategy analysis"""
     try:
         # EMA
-        df['EMA20'] = talib.EMA(df['close'], timeperiod=20)
-        df['EMA50'] = talib.EMA(df['close'], timeperiod=50)
+        df['EMA20'] = ta.trend.ema_indicator(df['close'], window=20)
+        df['EMA50'] = ta.trend.ema_indicator(df['close'], window=50)
         
         # RSI
-        df['RSI'] = talib.RSI(df['close'], timeperiod=14)
+        df['RSI'] = ta.momentum.rsi(df['close'], window=14)
         
         # MACD
-        macd, signal, hist = talib.MACD(df['close'])
-        df['MACD'] = macd
-        df['MACD_signal'] = signal
-        df['MACD_hist'] = hist
+        macd = ta.trend.MACD(df['close'])
+        df['MACD'] = macd.macd()
+        df['MACD_signal'] = macd.macd_signal()
+        df['MACD_hist'] = macd.macd_diff()
         
         return df
     except Exception as e:
