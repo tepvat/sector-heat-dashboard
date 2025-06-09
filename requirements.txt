@@ -1,7 +1,7 @@
 streamlit
-pandas==2.2.1
+pandas==2.2.0
 requests==2.31.0
-python-telegram-bot==20.8
+python-telegram-bot==20.7
 pyyaml          # basket
-matplotlib==3.10.3
+matplotlib==3.8.2
 mplfinance==0.12.10b0

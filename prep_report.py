@@ -254,8 +254,10 @@ def main():
     import sys
     import asyncio
 
+    print("\n=== Starting script ===")
+    
     # Print all environment variables (except token)
-    print("Environment variables:")
+    print("\nEnvironment variables:")
     for key, value in os.environ.items():
         if key != "TELEGRAM_TOKEN":
             print(f"{key}: {value}")
@@ -270,14 +272,22 @@ def main():
         print("ERROR: Missing TELEGRAM_TOKEN or TELEGRAM_CHAT")
         sys.exit(1)
         
-    async def test_chart():
+    async def test_simple():
         try:
-            print("\nInitializing bot...")
+            print("\n=== Testing Telegram Bot ===")
+            print("Initializing bot...")
             bot = Bot(token=TOKEN)
             
-            # Test with just BTC
+            print("Sending test message...")
+            message = await bot.send_message(
+                chat_id=CHAT,
+                text="🤖 Simple test message"
+            )
+            print(f"Message sent! ID: {message.message_id}")
+            
+            print("\n=== Testing CoinGecko API ===")
             test_token = "BTC"
-            print(f"\nTesting with {test_token}...")
+            print(f"Fetching data for {test_token}...")
             
             # Get OHLCV data
             df = fetch_ohlcv(SYMBOL_MAP[test_token], days=1)
@@ -294,7 +304,7 @@ def main():
                 print("Failed to calculate VWAP")
                 return
                 
-            print(f"VWAP: {vwap:.2f}")
+            print(f"VWAP calculated: {vwap:.2f}")
             
             # Get current price data
             data = get_coin_data([test_token])
@@ -306,16 +316,12 @@ def main():
             high = data[test_token]['high']
             low = data[test_token]['low']
             
-            # Create chart
-            print("\nCreating chart...")
-            chart_file = create_price_chart(test_token, df, vwap, high, low, current_price)
-            if not chart_file:
-                print("Failed to create chart")
-                return
-                
-            print(f"Chart saved as {chart_file}")
+            print(f"Current price: ${current_price:.2f}")
+            print(f"24h High: ${high:.2f}")
+            print(f"24h Low: ${low:.2f}")
             
-            # Send results to Telegram
+            # Send results
+            print("\n=== Sending Results ===")
             message = (
                 f"*Test Results for {test_token}*\n\n"
                 f"Current Price: ${current_price:.2f}\n"
@@ -324,22 +330,13 @@ def main():
                 f"VWAP: ${vwap:.2f}\n"
             )
             
-            # Send message
+            print("Sending message...")
             await bot.send_message(
                 chat_id=CHAT,
                 text=message,
                 parse_mode='Markdown'
             )
-            
-            # Send chart
-            with open(chart_file, 'rb') as chart:
-                await bot.send_photo(
-                    chat_id=CHAT,
-                    photo=chart,
-                    caption=f"{test_token} Price Chart"
-                )
-            
-            print("Results and chart sent to Telegram")
+            print("Message sent successfully!")
             
         except TelegramError as e:
             print(f"\nTELEGRAM ERROR: {str(e)}")
@@ -354,8 +351,9 @@ def main():
             print(f"Traceback: {traceback.format_exc()}")
             sys.exit(1)
 
-    # Run the async function
-    asyncio.run(test_chart())
+    print("\n=== Running async function ===")
+    asyncio.run(test_simple())
+    print("\n=== Script completed ===")
 
 if __name__ == "__main__":
     main()
