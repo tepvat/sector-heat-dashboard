@@ -272,20 +272,9 @@ def main():
         print("ERROR: Missing TELEGRAM_TOKEN or TELEGRAM_CHAT")
         sys.exit(1)
         
-    async def test_simple():
+    async def test_chart_only():
         try:
-            print("\n=== Testing Telegram Bot ===")
-            print("Initializing bot...")
-            bot = Bot(token=TOKEN)
-            
-            print("Sending test message...")
-            message = await bot.send_message(
-                chat_id=CHAT,
-                text="🤖 Simple test message"
-            )
-            print(f"Message sent! ID: {message.message_id}")
-            
-            print("\n=== Testing CoinGecko API ===")
+            print("\n=== Testing Chart Creation ===")
             test_token = "BTC"
             print(f"Fetching data for {test_token}...")
             
@@ -320,23 +309,28 @@ def main():
             print(f"24h High: ${high:.2f}")
             print(f"24h Low: ${low:.2f}")
             
-            # Send results
-            print("\n=== Sending Results ===")
-            message = (
-                f"*Test Results for {test_token}*\n\n"
-                f"Current Price: ${current_price:.2f}\n"
-                f"24h High: ${high:.2f}\n"
-                f"24h Low: ${low:.2f}\n"
-                f"VWAP: ${vwap:.2f}\n"
-            )
+            # Create chart
+            print("\nCreating chart...")
+            chart_file = create_price_chart(test_token, df, vwap, high, low, current_price)
+            if not chart_file:
+                print("Failed to create chart")
+                return
+                
+            print(f"Chart saved as {chart_file}")
             
-            print("Sending message...")
-            await bot.send_message(
-                chat_id=CHAT,
-                text=message,
-                parse_mode='Markdown'
-            )
-            print("Message sent successfully!")
+            # Send only the chart
+            print("\n=== Sending Chart ===")
+            print("Initializing bot...")
+            bot = Bot(token=TOKEN)
+            
+            print("Sending chart...")
+            with open(chart_file, 'rb') as chart:
+                await bot.send_photo(
+                    chat_id=CHAT,
+                    photo=chart,
+                    caption=f"{test_token} Price Chart"
+                )
+            print("Chart sent successfully!")
             
         except TelegramError as e:
             print(f"\nTELEGRAM ERROR: {str(e)}")
@@ -352,7 +346,7 @@ def main():
             sys.exit(1)
 
     print("\n=== Running async function ===")
-    asyncio.run(test_simple())
+    asyncio.run(test_chart_only())
     print("\n=== Script completed ===")
 
 if __name__ == "__main__":
