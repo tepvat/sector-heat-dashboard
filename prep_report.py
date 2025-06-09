@@ -21,33 +21,97 @@ COINGECKO_MARKET_URL = "https://api.coingecko.com/api/v3/coins/markets"
 def fetch_ohlcv(symbol='BTCUSDT', interval='15m', limit=96):
     url = "https://api.binance.com/api/v3/klines"
     params = {'symbol': symbol, 'interval': interval, 'limit': limit}
-    resp = requests.get(url, params=params, timeout=10)
-    data = resp.json()
-    ohlcv = []
-    for row in data:
-        ohlcv.append({
-            'high': float(row[2]),
-            'low': float(row[3]),
-            'close': float(row[4]),
-            'volume': float(row[5])
-        })
-    return ohlcv
+    print(f"\n[DEBUG] Fetching OHLCV for {symbol}")
+    print(f"[DEBUG] URL: {url}")
+    print(f"[DEBUG] Params: {params}")
+    
+    try:
+        resp = requests.get(url, params=params, timeout=10)
+        print(f"[DEBUG] Status code: {resp.status_code}")
+        
+        if resp.status_code != 200:
+            print(f"[ERROR] Bad status code: {resp.status_code}")
+            print(f"[ERROR] Response: {resp.text}")
+            return []
+            
+        data = resp.json()
+        print(f"[DEBUG] Received {len(data)} rows of data")
+        
+        if not data:
+            print(f"[ERROR] No data received for {symbol}")
+            return []
+            
+        ohlcv = []
+        for row in data:
+            try:
+                ohlcv.append({
+                    'high': float(row[2]),
+                    'low': float(row[3]),
+                    'close': float(row[4]),
+                    'volume': float(row[5])
+                })
+            except (IndexError, ValueError) as e:
+                print(f"[ERROR] Failed to parse row: {row}")
+                print(f"[ERROR] Error: {e}")
+                continue
+                
+        print(f"[DEBUG] Successfully parsed {len(ohlcv)} rows")
+        return ohlcv
+        
+    except requests.exceptions.RequestException as e:
+        print(f"[ERROR] Request failed for {symbol}: {e}")
+        return []
+    except Exception as e:
+        print(f"[ERROR] Unexpected error in fetch_ohlcv for {symbol}: {e}")
+        return []
 
 def calculate_vwap(ohlcv):
+    if not ohlcv:
+        print("[ERROR] Empty OHLCV data")
+        return None
+        
+    print(f"[DEBUG] Calculating VWAP for {len(ohlcv)} rows")
     total_pv = 0
     total_vol = 0
-    for k in ohlcv:
-        price = (k['high'] + k['low'] + k['close']) / 3
-        vol = k['volume']
-        total_pv += price * vol
-        total_vol += vol
+    
+    for i, k in enumerate(ohlcv):
+        try:
+            price = (k['high'] + k['low'] + k['close']) / 3
+            vol = k['volume']
+            total_pv += price * vol
+            total_vol += vol
+            
+            if i < 3:  # Print first 3 rows for debugging
+                print(f"[DEBUG] Row {i}: price={price:.2f}, vol={vol:.2f}")
+                
+        except KeyError as e:
+            print(f"[ERROR] Missing key in data: {e}")
+            print(f"[ERROR] Data: {k}")
+            continue
+            
     if total_vol == 0:
+        print("[ERROR] Total volume is 0")
         return None
-    return total_pv / total_vol
+        
+    vwap = total_pv / total_vol
+    print(f"[DEBUG] VWAP calculated: {vwap:.2f}")
+    print(f"[DEBUG] Total volume: {total_vol:.2f}")
+    return vwap
 
 def get_vwap(symbol='BTCUSDT'):
+    print(f"\n[DEBUG] Getting VWAP for {symbol}")
     ohlcv = fetch_ohlcv(symbol, interval='15m', limit=96)
-    return calculate_vwap(ohlcv)
+    
+    if not ohlcv:
+        print(f"[ERROR] No OHLCV data available for {symbol}")
+        return None
+        
+    vwap = calculate_vwap(ohlcv)
+    if vwap is None:
+        print(f"[ERROR] Could not calculate VWAP for {symbol}")
+    else:
+        print(f"[SUCCESS] VWAP for {symbol}: {vwap:.2f}")
+    return vwap
 
 # --- Hinta- ja range-tiedot ---
 def get_coin_data(tokens):
@@ -99,13 +163,16 @@ def build_message() -> str:
 
     data = get_coin_data(TOKENS)
     vwap_data = {}
+    
+    print("\n[DEBUG] Starting VWAP calculations for all tokens")
     for token in TOKENS:
         try:
             binance_symbol = SYMBOL_TO_BINANCE[token]
+            print(f"\n[DEBUG] Processing VWAP for {token} ({binance_symbol})")
             vwap = get_vwap(binance_symbol)
             vwap_data[token] = vwap
         except Exception as e:
-            print(f"VWAP error {token}: {e}")
+            print(f"[ERROR] VWAP error for {token}: {e}")
             vwap_data[token] = None
 
     for token in TOKENS:
