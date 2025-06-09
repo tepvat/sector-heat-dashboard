@@ -320,25 +320,54 @@ def main():
     from telegram import Bot
     import os
 
-    TOKEN = os.environ["TELEGRAM_TOKEN"]
-    CHAT  = os.environ["TELEGRAM_CHAT"]
-    bot   = Bot(TOKEN)
-
-    text, chart_files = build_message()
+    TOKEN = os.environ.get("TELEGRAM_TOKEN")
+    CHAT = os.environ.get("TELEGRAM_CHAT")
     
-    # Send text message
-    bot.send_message(chat_id=CHAT, text=text, parse_mode='Markdown')
+    logging.info(f"Starting bot with TOKEN: {TOKEN[:5]}... and CHAT: {CHAT}")
     
-    # Send charts
-    for chart_file in chart_files:
-        with open(chart_file, 'rb') as f:
-            bot.send_photo(chat_id=CHAT, photo=f)
-        os.remove(chart_file)  # Clean up
-    
-    # Send debug log if it exists
-    if os.path.exists(log_file):
-        with open(log_file, 'rb') as f:
-            bot.send_document(chat_id=CHAT, document=f, caption="VWAP Debug Log")
+    if not TOKEN or not CHAT:
+        logging.error("Missing TELEGRAM_TOKEN or TELEGRAM_CHAT environment variables")
+        return
+        
+    try:
+        bot = Bot(TOKEN)
+        logging.info("Bot initialized successfully")
+        
+        # Send test message first
+        logging.info("Sending test message...")
+        bot.send_message(chat_id=CHAT, text="🤖 Bot starting up...")
+        logging.info("Test message sent successfully")
+        
+        text, chart_files = build_message()
+        logging.info(f"Message built successfully, length: {len(text)}")
+        logging.info(f"Generated {len(chart_files)} chart files")
+        
+        # Send text message
+        logging.info("Attempting to send text message...")
+        bot.send_message(chat_id=CHAT, text=text, parse_mode='Markdown')
+        logging.info("Text message sent successfully")
+        
+        # Send charts
+        for chart_file in chart_files:
+            logging.info(f"Sending chart file: {chart_file}")
+            with open(chart_file, 'rb') as f:
+                bot.send_photo(chat_id=CHAT, photo=f)
+            logging.info(f"Chart {chart_file} sent successfully")
+            os.remove(chart_file)  # Clean up
+            logging.info(f"Chart file {chart_file} removed")
+        
+        # Send debug log if it exists
+        if os.path.exists(log_file):
+            logging.info("Sending debug log...")
+            with open(log_file, 'rb') as f:
+                bot.send_document(chat_id=CHAT, document=f, caption="VWAP Debug Log")
+            logging.info("Debug log sent successfully")
+            
+    except Exception as e:
+        logging.error(f"Error in main: {str(e)}")
+        logging.error(f"Error type: {type(e)}")
+        import traceback
+        logging.error(f"Traceback: {traceback.format_exc()}")
 
 if __name__ == "__main__":
     main()
