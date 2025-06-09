@@ -3,12 +3,14 @@ import requests
 import logging
 import os
 import pandas as pd
+import numpy as np
 import matplotlib
 matplotlib.use('Agg')  # Set the backend to non-interactive 'Agg'
 import matplotlib.pyplot as plt
 import mplfinance as mpf
 from matplotlib.dates import DateFormatter
 import matplotlib.dates as mdates
+import talib
 
 # Set up logging
 log_file = 'vwap_debug.log'
@@ -212,6 +214,93 @@ def get_setup_quality(score):
     except:
         return "⚪️"
 
+def calculate_technical_indicators(df):
+    """Calculate technical indicators for strategy analysis"""
+    try:
+        # EMA
+        df['EMA20'] = talib.EMA(df['close'], timeperiod=20)
+        df['EMA50'] = talib.EMA(df['close'], timeperiod=50)
+        
+        # RSI
+        df['RSI'] = talib.RSI(df['close'], timeperiod=14)
+        
+        # MACD
+        macd, signal, hist = talib.MACD(df['close'])
+        df['MACD'] = macd
+        df['MACD_signal'] = signal
+        df['MACD_hist'] = hist
+        
+        return df
+    except Exception as e:
+        logging.error(f"Error calculating technical indicators: {e}")
+        return None
+
+def analyze_trading_strategy(df, current_price, high, low):
+    """Analyze trading strategy based on price action and indicators"""
+    try:
+        # Calculate range
+        daily_range = high - low
+        range_percent = (daily_range / low) * 100
+        
+        # Calculate price position in range
+        price_position = (current_price - low) / daily_range * 100
+        
+        # Determine if range trading or breakout strategy
+        if range_percent < 3:  # Tight range
+            strategy = "Range Trading"
+            entry_type = "Range Reversal"
+        else:
+            strategy = "Breakout Trading"
+            entry_type = "Breakout Confirmation"
+        
+        # Analyze indicators
+        last_row = df.iloc[-1]
+        indicator_signals = []
+        
+        # EMA analysis
+        if current_price > last_row['EMA20'] and last_row['EMA20'] > last_row['EMA50']:
+            indicator_signals.append("EMA: Bullish")
+        elif current_price < last_row['EMA20'] and last_row['EMA20'] < last_row['EMA50']:
+            indicator_signals.append("EMA: Bearish")
+            
+        # RSI analysis
+        if last_row['RSI'] > 70:
+            indicator_signals.append("RSI: Overbought")
+        elif last_row['RSI'] < 30:
+            indicator_signals.append("RSI: Oversold")
+            
+        # MACD analysis
+        if last_row['MACD'] > last_row['MACD_signal']:
+            indicator_signals.append("MACD: Bullish")
+        else:
+            indicator_signals.append("MACD: Bearish")
+            
+        # Calculate potential stop loss and take profit levels
+        if strategy == "Range Trading":
+            stop_loss = low * 0.995  # 0.5% below range low
+            take_profit = high * 1.01  # 1% above range high
+        else:  # Breakout Trading
+            stop_loss = current_price * 0.98  # 2% below current price
+            take_profit = current_price * 1.04  # 4% above current price
+            
+        risk = current_price - stop_loss
+        reward = take_profit - current_price
+        risk_reward_ratio = reward / risk if risk != 0 else 0
+        
+        return {
+            'strategy': strategy,
+            'entry_type': entry_type,
+            'range_percent': range_percent,
+            'price_position': price_position,
+            'indicator_signals': indicator_signals,
+            'stop_loss': stop_loss,
+            'take_profit': take_profit,
+            'risk_reward_ratio': risk_reward_ratio
+        }
+    except Exception as e:
+        logging.error(f"Error analyzing trading strategy: {e}")
+        return None
+
 def build_message() -> str:
     today = datetime.date.today().isoformat()
     lines = [f"*London prep*  {today} 06:30 UTC\n"]
@@ -220,7 +309,7 @@ def build_message() -> str:
     vwap_data = {}
     chart_files = []
     
-    logging.debug("Starting VWAP calculations for all tokens")
+    logging.debug("Starting analysis for all tokens")
     for token in TOKENS:
         try:
             logging.debug(f"Processing {token}")
@@ -235,10 +324,20 @@ def build_message() -> str:
             vwap = calculate_vwap(df)
             vwap_data[token] = vwap
             
+            # Calculate technical indicators
+            df = calculate_technical_indicators(df)
+            if df is None:
+                continue
+            
             # Get current price and high/low
             current_price = data[token]['price']
             high = data[token]['high']
             low = data[token]['low']
+            
+            # Analyze trading strategy
+            strategy_analysis = analyze_trading_strategy(df, current_price, high, low)
+            if strategy_analysis is None:
+                continue
             
             # Create chart
             chart_file = create_price_chart(token, df, vwap, high, low, current_price)
@@ -253,27 +352,29 @@ def build_message() -> str:
             bias = "bullish" if current_price > vwap else "bearish"
             bias_emoji = get_bias_emoji(bias)
             
-            # Calculate setup score based on price vs VWAP and 24h range
-            vwap_diff_percent = abs((current_price - vwap) / vwap * 100)
-            range_percent = (high - low) / low * 100
-            
-            if vwap_diff_percent < 1 and range_percent < 2:
-                setup_score = "9/10"  # Very tight range, price near VWAP
-            elif vwap_diff_percent < 2 and range_percent < 3:
-                setup_score = "8/10"  # Good range, price near VWAP
-            elif vwap_diff_percent < 3 and range_percent < 4:
-                setup_score = "7/10"  # Decent range, price near VWAP
-            else:
-                setup_score = "6/10"  # Wider range or price far from VWAP
+            # Calculate setup score based on strategy analysis
+            setup_score = "6/10"  # Default score
+            if strategy_analysis['risk_reward_ratio'] >= 2:
+                if len(strategy_analysis['indicator_signals']) >= 2:
+                    setup_score = "9/10"
+                else:
+                    setup_score = "8/10"
+            elif strategy_analysis['risk_reward_ratio'] >= 1.5:
+                setup_score = "7/10"
                 
             setup_emoji = get_setup_quality(setup_score)
             
             lines.append(
                 f"*{token}*  {emoji} ({percent_text})\n"
-                f"`Asia:`  {low:.1f}–{high:.1f}\n"
+                f"`Asia:`  {low:.1f}–{high:.1f} ({strategy_analysis['range_percent']:.1f}%)\n"
                 f"`Price:`  ${current_price:.1f}\n"
                 f"`VWAP:`  {vwap:.1f}\n"
-                f"`Bias:`  {bias_emoji} {bias}\n"
+                f"`Strategy:`  {strategy_analysis['strategy']}\n"
+                f"`Entry:`  {strategy_analysis['entry_type']}\n"
+                f"`Signals:`  {', '.join(strategy_analysis['indicator_signals'])}\n"
+                f"`Stop:`  ${strategy_analysis['stop_loss']:.1f}\n"
+                f"`Target:`  ${strategy_analysis['take_profit']:.1f}\n"
+                f"`R/R:`  {strategy_analysis['risk_reward_ratio']:.1f}\n"
                 f"`Setup:`  {setup_emoji} {setup_score}\n"
             )
             
