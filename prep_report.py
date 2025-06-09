@@ -1,5 +1,18 @@
 import datetime
 import requests
+import logging
+import os
+
+# Set up logging
+log_file = 'vwap_debug.log'
+logging.basicConfig(
+    level=logging.DEBUG,
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler(log_file),
+        logging.StreamHandler()  # Also print to console
+    ]
+)
 
 # Mappaukset
 SYMBOL_MAP = {
@@ -19,35 +32,34 @@ COINGECKO_MARKET_URL = "https://api.coingecko.com/api/v3/coins/markets"
 
 # --- VWAP-laskenta ---
 def fetch_ohlcv(symbol='BTCUSDT', interval='15m', limit=96):
-    # Using the exact same URL format as the working curl command
     url = f"https://api.binance.com/api/v3/klines?symbol={symbol}&interval={interval}&limit={limit}"
-    print(f"\n[DEBUG] Fetching OHLCV for {symbol}")
-    print(f"[DEBUG] Full URL: {url}")
+    logging.debug(f"Fetching OHLCV for {symbol}")
+    logging.debug(f"Full URL: {url}")
     
     try:
         headers = {
             'User-Agent': 'Mozilla/5.0',
             'Accept': 'application/json'
         }
-        print("[DEBUG] Making request...")
+        logging.debug("Making request...")
         resp = requests.get(url, headers=headers, timeout=10)
-        print(f"[DEBUG] Status code: {resp.status_code}")
-        print(f"[DEBUG] Response headers: {dict(resp.headers)}")
+        logging.debug(f"Status code: {resp.status_code}")
+        logging.debug(f"Response headers: {dict(resp.headers)}")
         
         if resp.status_code != 200:
-            print(f"[ERROR] Bad status code: {resp.status_code}")
-            print(f"[ERROR] Response text: {resp.text}")
+            logging.error(f"Bad status code: {resp.status_code}")
+            logging.error(f"Response text: {resp.text}")
             return []
             
-        print("[DEBUG] Parsing JSON response...")
+        logging.debug("Parsing JSON response...")
         data = resp.json()
-        print(f"[DEBUG] Received {len(data)} rows of data")
+        logging.debug(f"Received {len(data)} rows of data")
         
         if not data:
-            print(f"[ERROR] No data received for {symbol}")
+            logging.error(f"No data received for {symbol}")
             return []
             
-        print(f"[DEBUG] First row raw data: {data[0]}")
+        logging.debug(f"First row raw data: {data[0]}")
         
         ohlcv = []
         for i, row in enumerate(data):
@@ -61,29 +73,29 @@ def fetch_ohlcv(symbol='BTCUSDT', interval='15m', limit=96):
                 }
                 ohlcv.append(parsed_row)
                 if i < 2:  # Print first two parsed rows
-                    print(f"[DEBUG] Parsed row {i}: {parsed_row}")
+                    logging.debug(f"Parsed row {i}: {parsed_row}")
             except (IndexError, ValueError) as e:
-                print(f"[ERROR] Failed to parse row {i}: {row}")
-                print(f"[ERROR] Error: {e}")
+                logging.error(f"Failed to parse row {i}: {row}")
+                logging.error(f"Error: {e}")
                 continue
                 
-        print(f"[DEBUG] Successfully parsed {len(ohlcv)} rows")
+        logging.debug(f"Successfully parsed {len(ohlcv)} rows")
         return ohlcv
         
     except requests.exceptions.RequestException as e:
-        print(f"[ERROR] Request failed for {symbol}: {e}")
+        logging.error(f"Request failed for {symbol}: {e}")
         return []
     except Exception as e:
-        print(f"[ERROR] Unexpected error in fetch_ohlcv for {symbol}: {e}")
-        print(f"[ERROR] Error type: {type(e)}")
+        logging.error(f"Unexpected error in fetch_ohlcv for {symbol}: {e}")
+        logging.error(f"Error type: {type(e)}")
         return []
 
 def calculate_vwap(ohlcv):
     if not ohlcv:
-        print("[ERROR] Empty OHLCV data")
+        logging.error("Empty OHLCV data")
         return None
         
-    print(f"[DEBUG] Calculating VWAP for {len(ohlcv)} rows")
+    logging.debug(f"Calculating VWAP for {len(ohlcv)} rows")
     total_pv = 0
     total_vol = 0
     
@@ -95,40 +107,40 @@ def calculate_vwap(ohlcv):
             total_vol += vol
             
             if i < 3:  # Print first 3 calculations
-                print(f"[DEBUG] Row {i} calculation:")
-                print(f"  Price: {price:.2f} = ({k['high']:.2f} + {k['low']:.2f} + {k['close']:.2f}) / 3")
-                print(f"  Volume: {vol:.2f}")
-                print(f"  Price * Volume: {price * vol:.2f}")
+                logging.debug(f"Row {i} calculation:")
+                logging.debug(f"  Price: {price:.2f} = ({k['high']:.2f} + {k['low']:.2f} + {k['close']:.2f}) / 3")
+                logging.debug(f"  Volume: {vol:.2f}")
+                logging.debug(f"  Price * Volume: {price * vol:.2f}")
                 
         except KeyError as e:
-            print(f"[ERROR] Missing key in data: {e}")
-            print(f"[ERROR] Data: {k}")
+            logging.error(f"Missing key in data: {e}")
+            logging.error(f"Data: {k}")
             continue
             
     if total_vol == 0:
-        print("[ERROR] Total volume is 0")
+        logging.error("Total volume is 0")
         return None
         
     vwap = total_pv / total_vol
-    print(f"[DEBUG] Final VWAP calculation:")
-    print(f"  Total price * volume: {total_pv:.2f}")
-    print(f"  Total volume: {total_vol:.2f}")
-    print(f"  VWAP: {vwap:.2f}")
+    logging.debug("Final VWAP calculation:")
+    logging.debug(f"  Total price * volume: {total_pv:.2f}")
+    logging.debug(f"  Total volume: {total_vol:.2f}")
+    logging.debug(f"  VWAP: {vwap:.2f}")
     return vwap
 
 def get_vwap(symbol='BTCUSDT'):
-    print(f"\n[DEBUG] Getting VWAP for {symbol}")
+    logging.debug(f"\n[DEBUG] Getting VWAP for {symbol}")
     ohlcv = fetch_ohlcv(symbol, interval='15m', limit=96)
     
     if not ohlcv:
-        print(f"[ERROR] No OHLCV data available for {symbol}")
+        logging.error(f"[ERROR] No OHLCV data available for {symbol}")
         return None
         
     vwap = calculate_vwap(ohlcv)
     if vwap is None:
-        print(f"[ERROR] Could not calculate VWAP for {symbol}")
+        logging.error(f"[ERROR] Could not calculate VWAP for {symbol}")
     else:
-        print(f"[SUCCESS] VWAP for {symbol}: {vwap:.2f}")
+        logging.info(f"[SUCCESS] VWAP for {symbol}: {vwap:.2f}")
     return vwap
 
 # --- Hinta- ja range-tiedot ---
@@ -156,7 +168,7 @@ def get_coin_data(tokens):
             }
         return result
     except Exception as e:
-        print(f"CoinGecko API error: {e}")
+        logging.error(f"CoinGecko API error: {e}")
         return {}
 
 # --- Nuoli & prosenttiluku ---
@@ -182,15 +194,15 @@ def build_message() -> str:
     data = get_coin_data(TOKENS)
     vwap_data = {}
     
-    print("\n[DEBUG] Starting VWAP calculations for all tokens")
+    logging.debug("\n[DEBUG] Starting VWAP calculations for all tokens")
     for token in TOKENS:
         try:
             binance_symbol = SYMBOL_TO_BINANCE[token]
-            print(f"\n[DEBUG] Processing VWAP for {token} ({binance_symbol})")
+            logging.debug(f"\n[DEBUG] Processing VWAP for {token} ({binance_symbol})")
             vwap = get_vwap(binance_symbol)
             vwap_data[token] = vwap
         except Exception as e:
-            print(f"[ERROR] VWAP error for {token}: {e}")
+            logging.error(f"[ERROR] VWAP error for {token}: {e}")
             vwap_data[token] = None
 
     for token in TOKENS:
@@ -227,6 +239,11 @@ def main():
 
     text = build_message()
     bot.send_message(chat_id=CHAT, text=text, parse_mode='Markdown')
+    
+    # Send debug log to Telegram if it exists
+    if os.path.exists(log_file):
+        with open(log_file, 'rb') as f:
+            bot.send_document(chat_id=CHAT, document=f, caption="VWAP Debug Log")
 
 if __name__ == "__main__":
     main()
