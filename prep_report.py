@@ -270,21 +270,57 @@ def main():
         print("ERROR: Missing TELEGRAM_TOKEN or TELEGRAM_CHAT")
         sys.exit(1)
         
-    async def send_test_message():
+    async def test_coin_data():
         try:
             print("\nInitializing bot...")
             bot = Bot(token=TOKEN)
             
-            print("Testing bot connection...")
-            bot_info = await bot.get_me()
-            print(f"Bot connected: {bot_info}")
+            # Test with just BTC
+            test_token = "BTC"
+            print(f"\nTesting with {test_token}...")
             
-            print("\nSending test message...")
-            message = await bot.send_message(
-                chat_id=CHAT,
-                text="🤖 Test message - If you see this, the bot is working!"
+            # Get OHLCV data
+            df = fetch_ohlcv(SYMBOL_MAP[test_token], days=1)
+            if df is None or df.empty:
+                print("Failed to fetch OHLCV data")
+                return
+                
+            print(f"Received {len(df)} rows of data")
+            print(f"First row: {df.iloc[0]}")
+            
+            # Calculate VWAP
+            vwap = calculate_vwap(df)
+            if vwap is None:
+                print("Failed to calculate VWAP")
+                return
+                
+            print(f"VWAP: {vwap:.2f}")
+            
+            # Get current price data
+            data = get_coin_data([test_token])
+            if not data:
+                print("Failed to get current price data")
+                return
+                
+            current_price = data[test_token]['price']
+            high = data[test_token]['high']
+            low = data[test_token]['low']
+            
+            # Send results to Telegram
+            message = (
+                f"*Test Results for {test_token}*\n\n"
+                f"Current Price: ${current_price:.2f}\n"
+                f"24h High: ${high:.2f}\n"
+                f"24h Low: ${low:.2f}\n"
+                f"VWAP: ${vwap:.2f}\n"
             )
-            print(f"Message sent successfully! Message ID: {message.message_id}")
+            
+            await bot.send_message(
+                chat_id=CHAT,
+                text=message,
+                parse_mode='Markdown'
+            )
+            print("Results sent to Telegram")
             
         except TelegramError as e:
             print(f"\nTELEGRAM ERROR: {str(e)}")
@@ -300,7 +336,7 @@ def main():
             sys.exit(1)
 
     # Run the async function
-    asyncio.run(send_test_message())
+    asyncio.run(test_coin_data())
 
 if __name__ == "__main__":
     main()
