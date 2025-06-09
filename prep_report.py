@@ -197,6 +197,21 @@ def get_movement_emoji(current, low, high):
         emoji = "🟡"
     return emoji, percent
 
+def get_bias_emoji(bias):
+    return "🟢" if bias == "bullish" else "🔴"
+
+def get_setup_quality(score):
+    try:
+        num = int(score.split('/')[0])
+        if num >= 8:
+            return "🟢"
+        elif num >= 5:
+            return "🟡"
+        else:
+            return "🔴"
+    except:
+        return "⚪️"
+
 def build_message() -> str:
     today = datetime.date.today().isoformat()
     lines = [f"*London prep*  {today} 06:30 UTC\n"]
@@ -234,11 +249,32 @@ def build_message() -> str:
             emoji, percent = get_movement_emoji(current_price, low, high)
             percent_text = f"{percent}%" if percent is not None else "N/A"
             
+            # Add bias and setup score
+            bias = "bullish" if current_price > vwap else "bearish"
+            bias_emoji = get_bias_emoji(bias)
+            
+            # Calculate setup score based on price vs VWAP and 24h range
+            vwap_diff_percent = abs((current_price - vwap) / vwap * 100)
+            range_percent = (high - low) / low * 100
+            
+            if vwap_diff_percent < 1 and range_percent < 2:
+                setup_score = "9/10"  # Very tight range, price near VWAP
+            elif vwap_diff_percent < 2 and range_percent < 3:
+                setup_score = "8/10"  # Good range, price near VWAP
+            elif vwap_diff_percent < 3 and range_percent < 4:
+                setup_score = "7/10"  # Decent range, price near VWAP
+            else:
+                setup_score = "6/10"  # Wider range or price far from VWAP
+                
+            setup_emoji = get_setup_quality(setup_score)
+            
             lines.append(
                 f"*{token}*  {emoji} ({percent_text})\n"
                 f"`Asia:`  {low:.1f}–{high:.1f}\n"
                 f"`Price:`  ${current_price:.1f}\n"
                 f"`VWAP:`  {vwap:.1f}\n"
+                f"`Bias:`  {bias_emoji} {bias}\n"
+                f"`Setup:`  {setup_emoji} {setup_score}\n"
             )
             
         except Exception as e:
