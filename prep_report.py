@@ -29,34 +29,29 @@ SYMBOL_TO_BINANCE = {
 }
 TOKENS = ["BTC", "ETH", "SOL", "BNB"]
 COINGECKO_MARKET_URL = "https://api.coingecko.com/api/v3/coins/markets"
+COINGECKO_OHLC_URL = "https://api.coingecko.com/api/v3/coins/{id}/ohlc"
 
 # --- VWAP-laskenta ---
-def fetch_ohlcv(symbol='BTCUSDT', interval='15m', limit=96):
-    url = f"https://api.binance.com/api/v3/klines?symbol={symbol}&interval={interval}&limit={limit}"
-    logging.debug(f"Fetching OHLCV for {symbol}")
-    logging.debug(f"Full URL: {url}")
+def fetch_ohlcv(coin_id, days=1):
+    url = COINGECKO_OHLC_URL.format(id=coin_id)
+    params = {'vs_currency': 'usd', 'days': days}
+    logging.debug(f"Fetching OHLCV for {coin_id}")
+    logging.debug(f"URL: {url}")
     
     try:
-        headers = {
-            'User-Agent': 'Mozilla/5.0',
-            'Accept': 'application/json'
-        }
-        logging.debug("Making request...")
-        resp = requests.get(url, headers=headers, timeout=10)
+        resp = requests.get(url, params=params, timeout=10)
         logging.debug(f"Status code: {resp.status_code}")
-        logging.debug(f"Response headers: {dict(resp.headers)}")
         
         if resp.status_code != 200:
             logging.error(f"Bad status code: {resp.status_code}")
-            logging.error(f"Response text: {resp.text}")
+            logging.error(f"Response: {resp.text}")
             return []
             
-        logging.debug("Parsing JSON response...")
         data = resp.json()
         logging.debug(f"Received {len(data)} rows of data")
         
         if not data:
-            logging.error(f"No data received for {symbol}")
+            logging.error(f"No data received for {coin_id}")
             return []
             
         logging.debug(f"First row raw data: {data[0]}")
@@ -64,16 +59,15 @@ def fetch_ohlcv(symbol='BTCUSDT', interval='15m', limit=96):
         ohlcv = []
         for i, row in enumerate(data):
             try:
-                # Binance API returns: [timestamp, open, high, low, close, volume, ...]
-                parsed_row = {
+                # CoinGecko returns: [timestamp, open, high, low, close]
+                ohlcv.append({
                     'high': float(row[2]),
                     'low': float(row[3]),
                     'close': float(row[4]),
-                    'volume': float(row[5])
-                }
-                ohlcv.append(parsed_row)
-                if i < 2:  # Print first two parsed rows
-                    logging.debug(f"Parsed row {i}: {parsed_row}")
+                    'volume': 1.0  # CoinGecko doesn't provide volume in OHLC endpoint
+                })
+                if i < 2:
+                    logging.debug(f"Parsed row {i}: {ohlcv[-1]}")
             except (IndexError, ValueError) as e:
                 logging.error(f"Failed to parse row {i}: {row}")
                 logging.error(f"Error: {e}")
@@ -83,10 +77,10 @@ def fetch_ohlcv(symbol='BTCUSDT', interval='15m', limit=96):
         return ohlcv
         
     except requests.exceptions.RequestException as e:
-        logging.error(f"Request failed for {symbol}: {e}")
+        logging.error(f"Request failed for {coin_id}: {e}")
         return []
     except Exception as e:
-        logging.error(f"Unexpected error in fetch_ohlcv for {symbol}: {e}")
+        logging.error(f"Unexpected error in fetch_ohlcv for {coin_id}: {e}")
         logging.error(f"Error type: {type(e)}")
         return []
 
@@ -106,7 +100,7 @@ def calculate_vwap(ohlcv):
             total_pv += price * vol
             total_vol += vol
             
-            if i < 3:  # Print first 3 calculations
+            if i < 3:
                 logging.debug(f"Row {i} calculation:")
                 logging.debug(f"  Price: {price:.2f} = ({k['high']:.2f} + {k['low']:.2f} + {k['close']:.2f}) / 3")
                 logging.debug(f"  Volume: {vol:.2f}")
@@ -128,19 +122,20 @@ def calculate_vwap(ohlcv):
     logging.debug(f"  VWAP: {vwap:.2f}")
     return vwap
 
-def get_vwap(symbol='BTCUSDT'):
-    logging.debug(f"\n[DEBUG] Getting VWAP for {symbol}")
-    ohlcv = fetch_ohlcv(symbol, interval='15m', limit=96)
+def get_vwap(symbol):
+    coin_id = SYMBOL_MAP[symbol]
+    logging.debug(f"Getting VWAP for {symbol} ({coin_id})")
+    ohlcv = fetch_ohlcv(coin_id, days=1)
     
     if not ohlcv:
-        logging.error(f"[ERROR] No OHLCV data available for {symbol}")
+        logging.error(f"No OHLCV data available for {symbol}")
         return None
         
     vwap = calculate_vwap(ohlcv)
     if vwap is None:
-        logging.error(f"[ERROR] Could not calculate VWAP for {symbol}")
+        logging.error(f"Could not calculate VWAP for {symbol}")
     else:
-        logging.info(f"[SUCCESS] VWAP for {symbol}: {vwap:.2f}")
+        logging.info(f"VWAP for {symbol}: {vwap:.2f}")
     return vwap
 
 # --- Hinta- ja range-tiedot ---
@@ -194,15 +189,14 @@ def build_message() -> str:
     data = get_coin_data(TOKENS)
     vwap_data = {}
     
-    logging.debug("\n[DEBUG] Starting VWAP calculations for all tokens")
+    logging.debug("Starting VWAP calculations for all tokens")
     for token in TOKENS:
         try:
-            binance_symbol = SYMBOL_TO_BINANCE[token]
-            logging.debug(f"\n[DEBUG] Processing VWAP for {token} ({binance_symbol})")
-            vwap = get_vwap(binance_symbol)
+            logging.debug(f"Processing VWAP for {token}")
+            vwap = get_vwap(token)
             vwap_data[token] = vwap
         except Exception as e:
-            logging.error(f"[ERROR] VWAP error for {token}: {e}")
+            logging.error(f"VWAP error for {token}: {e}")
             vwap_data[token] = None
 
     for token in TOKENS:
