@@ -97,6 +97,9 @@ def calculate_vwap(df):
 def create_price_chart(symbol, df, vwap, high, low, current_price):
     """Create price chart with VWAP and levels for Asia session (00-07 UTC)"""
     try:
+        # Ensure index is in UTC
+        df.index = df.index.tz_localize('UTC')
+        
         # Filter data for Asia session (00-07 UTC)
         df_asia = df.between_time('00:00', '07:00')
         
@@ -124,8 +127,13 @@ def create_price_chart(symbol, df, vwap, high, low, current_price):
         ax.legend()
         
         # Format x-axis
-        ax.xaxis.set_major_formatter(mdates.DateFormatter('%H:%M'))
+        ax.xaxis.set_major_formatter(mdates.DateFormatter('%H:%M UTC'))
         plt.xticks(rotation=45)
+        
+        # Set x-axis limits to show full Asia session
+        start_time = df_asia.index[0].replace(hour=0, minute=0, second=0, microsecond=0)
+        end_time = df_asia.index[-1].replace(hour=7, minute=0, second=0, microsecond=0)
+        ax.set_xlim(start_time, end_time)
         
         # Add title
         plt.title(f'{symbol} Asia Session (00-07 UTC)')
