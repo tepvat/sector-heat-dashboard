@@ -394,31 +394,47 @@ def main():
     TOKEN = os.environ.get("TELEGRAM_TOKEN")
     CHAT = os.environ.get("TELEGRAM_CHAT")
     
-    if not TOKEN or not CHAT:
-        print("ERROR: Missing TELEGRAM_TOKEN or TELEGRAM_CHAT")
+    print("Checking environment variables...")
+    if not TOKEN:
+        print("ERROR: TELEGRAM_TOKEN is not set")
         sys.exit(1)
-
+    if not CHAT:
+        print("ERROR: TELEGRAM_CHAT is not set")
+        sys.exit(1)
+    print("Environment variables are set")
+    
     async def send_report():
         try:
+            print("Initializing Telegram bot...")
             bot = Bot(token=TOKEN)
-            message, chart_files = build_message()
             
+            print("Building message...")
+            message, chart_files = build_message()
+            print(f"Message built, length: {len(message)}")
+            print(f"Number of charts: {len(chart_files)}")
+            
+            print("Sending text message...")
             # Send text message
             await bot.send_message(
                 chat_id=CHAT,
                 text=message,
                 parse_mode='Markdown'
             )
+            print("Text message sent successfully")
             
             # Send charts
             for chart_file in chart_files:
                 if os.path.exists(chart_file):
+                    print(f"Sending chart: {chart_file}")
                     with open(chart_file, 'rb') as f:
                         await bot.send_photo(
                             chat_id=CHAT,
                             photo=f
                         )
+                    print(f"Chart {chart_file} sent successfully")
                     os.remove(chart_file)  # Clean up after sending
+                else:
+                    print(f"Warning: Chart file {chart_file} not found")
             
         except TelegramError as e:
             print(f"Telegram error: {str(e)}")
@@ -427,7 +443,9 @@ def main():
             print(f"Error: {str(e)}")
             sys.exit(1)
 
+    print("Starting async execution...")
     asyncio.run(send_report())
+    print("Async execution completed")
 
 if __name__ == "__main__":
     main()
