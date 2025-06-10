@@ -74,85 +74,61 @@ def fetch_ohlcv(coin_id, days=1):
         return None
 
 def calculate_vwap(df):
-    if df is None or df.empty:
-        logging.error("Empty OHLCV data")
-        return None
+    """Calculate Volume Weighted Average Price"""
+    try:
+        # Calculate typical price for each period
+        df['typical_price'] = (df['high'] + df['low'] + df['close']) / 3
         
-    logging.debug(f"Calculating VWAP for {len(df)} rows")
-    total_pv = 0
-    total_vol = 0
-    
-    for i, row in df.iterrows():
-        try:
-            price = (row['high'] + row['low'] + row['close']) / 3
-            vol = 1.0  # Using constant volume since CoinGecko doesn't provide it
-            total_pv += price * vol
-            total_vol += vol
-            
-            if i < 3:
-                logging.debug(f"Row {i} calculation:")
-                logging.debug(f"  Price: {price:.2f} = ({row['high']:.2f} + {row['low']:.2f} + {row['close']:.2f}) / 3")
-                logging.debug(f"  Volume: {vol:.2f}")
-                logging.debug(f"  Price * Volume: {price * vol:.2f}")
-                
-        except Exception as e:
-            logging.error(f"Error calculating VWAP for row {i}: {e}")
-            continue
-            
-    if total_vol == 0:
-        logging.error("Total volume is 0")
-        return None
+        # Since CoinGecko doesn't provide volume, use constant volume of 1.0
+        df['volume'] = 1.0
         
-    vwap = total_pv / total_vol
-    logging.debug("Final VWAP calculation:")
-    logging.debug(f"  Total price * volume: {total_pv:.2f}")
-    logging.debug(f"  Total volume: {total_vol:.2f}")
-    logging.debug(f"  VWAP: {vwap:.2f}")
-    return vwap
+        # Calculate VWAP
+        vwap = (df['typical_price'] * df['volume']).sum() / df['volume'].sum()
+        
+        logging.debug(f"VWAP calculation:")
+        logging.debug(f"  Typical price range: {df['typical_price'].min():.2f} - {df['typical_price'].max():.2f}")
+        logging.debug(f"  Final VWAP: {vwap:.2f}")
+        
+        return vwap
+    except Exception as e:
+        logging.error(f"Error calculating VWAP: {e}")
+        return None
 
 def create_price_chart(symbol, df, vwap, high, low, current_price):
+    """Create price chart with VWAP and levels"""
     try:
         # Create figure and axis
-        fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 8), gridspec_kw={'height_ratios': [3, 1]})
+        fig, ax = plt.subplots(figsize=(12, 6))
         
-        # Plot candlesticks
-        mpf.plot(df, type='candle', style='charles',
-                 title=f'{symbol} Price Chart',
-                 ylabel='Price (USD)',
-                 ax=ax1,
-                 volume=False)
+        # Plot price
+        ax.plot(df.index, df['close'], label='Price', color='blue')
         
-        # Add VWAP line
-        ax1.axhline(y=vwap, color='blue', linestyle='--', label='VWAP')
+        # Plot VWAP
+        ax.axhline(y=vwap, color='red', linestyle='--', label='VWAP')
         
-        # Add high/low levels
-        ax1.axhline(y=high, color='green', linestyle=':', label='High')
-        ax1.axhline(y=low, color='red', linestyle=':', label='Low')
+        # Plot high/low levels
+        ax.axhline(y=high, color='green', linestyle=':', label='High')
+        ax.axhline(y=low, color='red', linestyle=':', label='Low')
         
-        # Add current price
-        ax1.axhline(y=current_price, color='purple', linestyle='-', label='Current Price')
+        # Plot current price
+        ax.axhline(y=current_price, color='purple', linestyle='-', label='Current')
         
         # Add legend
-        ax1.legend()
+        ax.legend()
         
         # Format x-axis
-        ax1.xaxis.set_major_formatter(mdates.DateFormatter('%H:%M'))
+        ax.xaxis.set_major_formatter(mdates.DateFormatter('%H:%M'))
         plt.xticks(rotation=45)
         
-        # Plot volume (using constant volume)
-        ax2.bar(df.index, [1.0] * len(df), color='gray', alpha=0.5)
-        ax2.set_ylabel('Volume')
-        ax2.xaxis.set_major_formatter(mdates.DateFormatter('%H:%M'))
-        plt.xticks(rotation=45)
-        
-        # Adjust layout
-        plt.tight_layout()
+        # Add title
+        plt.title(f'{symbol} Price Chart')
         
         # Save the figure
         filename = f'{symbol.lower()}_chart.png'
-        plt.savefig(filename)
+        plt.savefig(filename, bbox_inches='tight')
         plt.close()
         
+        logging.debug(f"Chart created: {filename}")
         return filename
     except Exception as e:
         logging.error(f"Error creating chart for {symbol}: {e}")
