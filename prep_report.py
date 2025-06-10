@@ -95,13 +95,20 @@ def calculate_vwap(df):
         return None
 
 def create_price_chart(symbol, df, vwap, high, low, current_price):
-    """Create price chart with VWAP and levels"""
+    """Create price chart with VWAP and levels for Asia session (00-07 UTC)"""
     try:
+        # Filter data for Asia session (00-07 UTC)
+        df_asia = df.between_time('00:00', '07:00')
+        
+        if df_asia.empty:
+            logging.error(f"No Asia session data available for {symbol}")
+            return None
+            
         # Create figure and axis
         fig, ax = plt.subplots(figsize=(12, 6))
         
         # Plot price
-        ax.plot(df.index, df['close'], label='Price', color='blue')
+        ax.plot(df_asia.index, df_asia['close'], label='Price', color='blue')
         
         # Plot VWAP
         ax.axhline(y=vwap, color='red', linestyle='--', label='VWAP')
@@ -121,7 +128,7 @@ def create_price_chart(symbol, df, vwap, high, low, current_price):
         plt.xticks(rotation=45)
         
         # Add title
-        plt.title(f'{symbol} Price Chart')
+        plt.title(f'{symbol} Asia Session (00-07 UTC)')
         
         # Save the figure
         filename = f'{symbol.lower()}_chart.png'
