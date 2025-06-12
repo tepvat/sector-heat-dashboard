@@ -309,15 +309,20 @@ def build_message() -> str:
             # Get OHLCV data
             df = fetch_ohlcv(coin_id, days=1)
             if df is None or df.empty:
+                logging.error(f"No data available for {token}")
                 continue
                 
             # Calculate VWAP
             vwap = calculate_vwap(df)
+            if vwap is None:
+                logging.error(f"Could not calculate VWAP for {token}")
+                continue
             vwap_data[token] = vwap
             
             # Calculate technical indicators
             df = calculate_technical_indicators(df)
             if df is None:
+                logging.error(f"Could not calculate technical indicators for {token}")
                 continue
             
             # Get current price and high/low
@@ -328,6 +333,7 @@ def build_message() -> str:
             # Analyze trading strategy
             strategy_analysis = analyze_trading_strategy(df, current_price, high, low)
             if strategy_analysis is None:
+                logging.error(f"Could not analyze trading strategy for {token}")
                 continue
             
             # Create chart
@@ -401,6 +407,9 @@ def main():
             
             print("Building message...")
             message, chart_files = build_message()
+            if not message:
+                print("ERROR: Failed to build message")
+                sys.exit(1)
             print(f"Message built, length: {len(message)}")
             print(f"Number of charts: {len(chart_files)}")
             
