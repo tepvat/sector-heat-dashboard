@@ -321,6 +321,7 @@ def analyze_trading_strategy(df, current_price, high, low):
 def build_message() -> str:
     today = datetime.date.today().isoformat()
     lines = [f"*London prep*  {today} 06:30 UTC\n"]
+    error_lines = []
 
     data = get_coin_data(TOKENS)
     vwap_data = {}
@@ -336,16 +337,20 @@ def build_message() -> str:
             # Get OHLCV data
             df = fetch_ohlcv(coin_id, days=1)
             if df is None or df.empty:
-                print(f"[DEBUG] No OHLCV data for {token}")
-                logging.error(f"No data available for {token}")
+                msg = f"{token}: No OHLCV data"
+                print(f"[DEBUG] {msg}")
+                logging.error(msg)
+                error_lines.append(msg)
                 continue
             print(f"[DEBUG] OHLCV data shape for {token}: {df.shape}")
             
             # Calculate VWAP
             vwap = calculate_vwap(df)
             if vwap is None:
-                print(f"[DEBUG] VWAP calculation failed for {token}")
-                logging.error(f"Could not calculate VWAP for {token}")
+                msg = f"{token}: VWAP calculation failed"
+                print(f"[DEBUG] {msg}")
+                logging.error(msg)
+                error_lines.append(msg)
                 continue
             print(f"[DEBUG] VWAP for {token}: {vwap}")
             vwap_data[token] = vwap
@@ -353,8 +358,10 @@ def build_message() -> str:
             # Calculate technical indicators
             df = calculate_technical_indicators(df)
             if df is None:
-                print(f"[DEBUG] Technical indicators calculation failed for {token}")
-                logging.error(f"Could not calculate technical indicators for {token}")
+                msg = f"{token}: Technical indicators calculation failed"
+                print(f"[DEBUG] {msg}")
+                logging.error(msg)
+                error_lines.append(msg)
                 continue
             print(f"[DEBUG] Technical indicators calculated for {token}")
             
@@ -367,8 +374,10 @@ def build_message() -> str:
             # Analyze trading strategy
             strategy_analysis = analyze_trading_strategy(df, current_price, high, low)
             if strategy_analysis is None:
-                print(f"[DEBUG] Trading strategy analysis failed for {token}")
-                logging.error(f"Could not analyze trading strategy for {token}")
+                msg = f"{token}: Trading strategy analysis failed"
+                print(f"[DEBUG] {msg}")
+                logging.error(msg)
+                error_lines.append(msg)
                 continue
             print(f"[DEBUG] Trading strategy analysis for {token}: {strategy_analysis}")
             
@@ -400,7 +409,9 @@ def build_message() -> str:
                 print(f"[DEBUG] Chart created for {token}: {chart_file}")
                 chart_files.append(chart_file)
             else:
-                print(f"[DEBUG] Chart creation failed for {token}")
+                msg = f"{token}: Chart creation failed"
+                print(f"[DEBUG] {msg}")
+                error_lines.append(msg)
             
             # Build message
             emoji, percent = get_movement_emoji(current_price, low, high)
@@ -438,10 +449,15 @@ def build_message() -> str:
             )
             print(f"[DEBUG] Finished processing {token}")
         except Exception as e:
-            print(f"[DEBUG] Exception for {token}: {e}")
-            logging.error(f"Error processing {token}: {e}")
+            msg = f"{token}: Exception: {e}"
+            print(f"[DEBUG] {msg}")
+            logging.error(msg)
+            error_lines.append(msg)
             continue
-            
+    # Jos ei yhtään tokenia onnistunut, lisätään virheet viestiin
+    if len(lines) == 1 and error_lines:
+        lines.append("\n*Errors:*")
+        lines.extend(error_lines)
     return "\n".join(lines), chart_files
 
 def main():
