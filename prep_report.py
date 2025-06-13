@@ -384,9 +384,9 @@ def build_message() -> str:
             # --- RR Analysis ---
             # Entry price: Asia session close (07:00 UTC)
             df.index = df.index.tz_localize('UTC')
-            asia_close_time = df[df.index.indexer_between_time('07:00', '07:00')].index
-            if not asia_close_time.empty:
-                entry_price = df.loc[asia_close_time[0], 'close']
+            df_07 = df.between_time('07:00', '07:00')
+            if not df_07.empty:
+                entry_price = df_07.iloc[0]['close']
             else:
                 entry_price = current_price
             stop_loss = strategy_analysis['stop_loss']
