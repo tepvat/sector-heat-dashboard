@@ -102,23 +102,30 @@ def create_price_chart(symbol, df, vwap, high, low, current_price):
         
         # Filter data for Asia session (00-07 UTC)
         df_asia = df.between_time('00:00', '07:00')
-        
         if df_asia.empty:
             logging.error(f"No Asia session data available for {symbol}")
             return None
-            
+        
+        # Calculate Asia session high/low
+        asia_high = df_asia['high'].max()
+        asia_low = df_asia['low'].min()
+        
         # Create figure and axis
         fig, ax = plt.subplots(figsize=(12, 6))
         
-        # Plot price
+        # Plot price (Asia session only)
         ax.plot(df_asia.index, df_asia['close'], label='Price', color='blue')
         
-        # Plot VWAP
+        # Plot VWAP (Asia session VWAP)
         ax.axhline(y=vwap, color='red', linestyle='--', label='VWAP')
         
-        # Plot high/low levels
-        ax.axhline(y=high, color='green', linestyle=':', label='High')
-        ax.axhline(y=low, color='red', linestyle=':', label='Low')
+        # Plot Asia session high/low
+        ax.axhline(y=asia_high, color='green', linestyle='--', label='Asia High')
+        ax.axhline(y=asia_low, color='red', linestyle='--', label='Asia Low')
+        
+        # Plot full-day high/low (dotted gray)
+        ax.axhline(y=high, color='gray', linestyle=':', label='Full Day High')
+        ax.axhline(y=low, color='gray', linestyle=':', label='Full Day Low')
         
         # Plot current price
         ax.axhline(y=current_price, color='purple', linestyle='-', label='Current')
@@ -130,7 +137,7 @@ def create_price_chart(symbol, df, vwap, high, low, current_price):
         ax.xaxis.set_major_formatter(mdates.DateFormatter('%H:%M UTC'))
         plt.xticks(rotation=45)
         
-        # Set x-axis limits to show full Asia session
+        # Set x-axis limits to show only Asia session
         start_time = df_asia.index[0].replace(hour=0, minute=0, second=0, microsecond=0)
         end_time = df_asia.index[-1].replace(hour=7, minute=0, second=0, microsecond=0)
         ax.set_xlim(start_time, end_time)
