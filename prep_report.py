@@ -329,38 +329,48 @@ def build_message() -> str:
     logging.debug("Starting analysis for all tokens")
     for token in TOKENS:
         try:
+            print(f"[DEBUG] Processing {token}")
             logging.debug(f"Processing {token}")
             coin_id = SYMBOL_MAP[token]
             
             # Get OHLCV data
             df = fetch_ohlcv(coin_id, days=1)
             if df is None or df.empty:
+                print(f"[DEBUG] No OHLCV data for {token}")
                 logging.error(f"No data available for {token}")
                 continue
-                
+            print(f"[DEBUG] OHLCV data shape for {token}: {df.shape}")
+            
             # Calculate VWAP
             vwap = calculate_vwap(df)
             if vwap is None:
+                print(f"[DEBUG] VWAP calculation failed for {token}")
                 logging.error(f"Could not calculate VWAP for {token}")
                 continue
+            print(f"[DEBUG] VWAP for {token}: {vwap}")
             vwap_data[token] = vwap
             
             # Calculate technical indicators
             df = calculate_technical_indicators(df)
             if df is None:
+                print(f"[DEBUG] Technical indicators calculation failed for {token}")
                 logging.error(f"Could not calculate technical indicators for {token}")
                 continue
+            print(f"[DEBUG] Technical indicators calculated for {token}")
             
             # Get current price and high/low
             current_price = data[token]['price']
             high = data[token]['high']
             low = data[token]['low']
+            print(f"[DEBUG] Price for {token}: {current_price}, High: {high}, Low: {low}")
             
             # Analyze trading strategy
             strategy_analysis = analyze_trading_strategy(df, current_price, high, low)
             if strategy_analysis is None:
+                print(f"[DEBUG] Trading strategy analysis failed for {token}")
                 logging.error(f"Could not analyze trading strategy for {token}")
                 continue
+            print(f"[DEBUG] Trading strategy analysis for {token}: {strategy_analysis}")
             
             # --- RR Analysis ---
             # Entry price: Asia session close (07:00 UTC)
@@ -378,6 +388,7 @@ def build_message() -> str:
             day_rr_max, day_max_price = calculate_max_rr(df, entry_price, stop_loss)
             # Perinteinen RR (nykyisillä take profit/stop loss -ehdoilla)
             rr = strategy_analysis['risk_reward_ratio']
+            print(f"[DEBUG] RR for {token}: {rr}, London max: {london_rr_max}, Day max: {day_rr_max}")
             
             # Create chart with RR markers
             chart_file = create_price_chart(
@@ -386,7 +397,10 @@ def build_message() -> str:
                 day_rr=rr, day_rr_max=day_rr_max, day_max_price=day_max_price
             )
             if chart_file:
+                print(f"[DEBUG] Chart created for {token}: {chart_file}")
                 chart_files.append(chart_file)
+            else:
+                print(f"[DEBUG] Chart creation failed for {token}")
             
             # Build message
             emoji, percent = get_movement_emoji(current_price, low, high)
@@ -422,8 +436,9 @@ def build_message() -> str:
                 f"`R/R:`  {rr:.2f} (London max: {london_rr_max:.2f} | Day max: {day_rr_max:.2f})\n"
                 f"`Setup:`  {setup_emoji} {setup_score}\n"
             )
-            
+            print(f"[DEBUG] Finished processing {token}")
         except Exception as e:
+            print(f"[DEBUG] Exception for {token}: {e}")
             logging.error(f"Error processing {token}: {e}")
             continue
             
