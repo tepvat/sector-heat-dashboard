@@ -94,8 +94,16 @@ def calculate_vwap(df):
         logging.error(f"Error calculating VWAP: {e}")
         return None
 
-def create_price_chart(symbol, df, vwap, high, low, current_price):
-    """Create price chart with VWAP and levels for Asia session (00-07 UTC)"""
+def calculate_max_rr(df, entry_price, stop_loss):
+    """Calculate the maximum achieved RR after entry price in the given DataFrame."""
+    max_price = df['high'].max()
+    risk = entry_price - stop_loss
+    reward = max_price - entry_price
+    rr_max = reward / risk if risk != 0 else 0
+    return rr_max, max_price
+
+def create_price_chart(symbol, df, vwap, high, low, current_price, london_rr=None, london_rr_max=None, london_max_price=None, day_rr=None, day_rr_max=None, day_max_price=None):
+    """Create price chart with VWAP and levels for Asia session (00-07 UTC) and show RR levels."""
     try:
         # Ensure index is in UTC
         df.index = df.index.tz_localize('UTC')
@@ -105,6 +113,8 @@ def create_price_chart(symbol, df, vwap, high, low, current_price):
         if df_asia.empty:
             logging.error(f"No Asia session data available for {symbol}")
             return None
+        # Filter data for London session (07:00-15:00 UTC)
+        df_london = df.between_time('07:00', '15:00')
         
         # Calculate Asia session high/low
         asia_high = df_asia['high'].max()
@@ -114,7 +124,10 @@ def create_price_chart(symbol, df, vwap, high, low, current_price):
         fig, ax = plt.subplots(figsize=(12, 6))
         
         # Plot price (Asia session only)
-        ax.plot(df_asia.index, df_asia['close'], label='Price', color='blue', linewidth=2)
+        ax.plot(df_asia.index, df_asia['close'], label='Asia Price', color='blue', linewidth=2)
+        # Plot London session price
+        if not df_london.empty:
+            ax.plot(df_london.index, df_london['close'], label='London Price', color='orange', linewidth=2)
         
         # Plot VWAP (Asia session VWAP)
         ax.axhline(y=vwap, color='magenta', linestyle='--', linewidth=2, label='VWAP')
@@ -130,6 +143,12 @@ def create_price_chart(symbol, df, vwap, high, low, current_price):
         # Plot current price
         ax.axhline(y=current_price, color='purple', linestyle='-', linewidth=2, label='Current')
         
+        # Plot max RR levels for London and full day
+        if london_max_price:
+            ax.axhline(y=london_max_price, color='deepskyblue', linestyle='-.', linewidth=2, label='London Max Price')
+        if day_max_price:
+            ax.axhline(y=day_max_price, color='red', linestyle='-.', linewidth=2, label='Day Max Price')
+        
         # Add legend
         ax.legend(loc='upper left', fontsize=10)
         
@@ -137,13 +156,13 @@ def create_price_chart(symbol, df, vwap, high, low, current_price):
         ax.xaxis.set_major_formatter(mdates.DateFormatter('%H:%M UTC'))
         plt.xticks(rotation=45)
         
-        # Set x-axis limits to show only Asia session
+        # Set x-axis limits to show only Asia and London session
         start_time = df_asia.index[0].replace(hour=0, minute=0, second=0, microsecond=0)
-        end_time = df_asia.index[-1].replace(hour=7, minute=0, second=0, microsecond=0)
+        end_time = df_london.index[-1].replace(hour=15, minute=0, second=0, microsecond=0) if not df_london.empty else df_asia.index[-1].replace(hour=7, minute=0, second=0, microsecond=0)
         ax.set_xlim(start_time, end_time)
         
         # Add title
-        plt.title(f'{symbol} Asia Session (00-07 UTC)')
+        plt.title(f'{symbol} Asia & London Sessions (00-15 UTC)')
         
         # Save the figure
         filename = f'{symbol.lower()}_chart.png'
@@ -343,8 +362,29 @@ def build_message() -> str:
                 logging.error(f"Could not analyze trading strategy for {token}")
                 continue
             
-            # Create chart
-            chart_file = create_price_chart(token, df, vwap, high, low, current_price)
+            # --- RR Analysis ---
+            # Entry price: Asia session close (07:00 UTC)
+            df.index = df.index.tz_localize('UTC')
+            asia_close_time = df[df.index.indexer_between_time('07:00', '07:00')].index
+            if not asia_close_time.empty:
+                entry_price = df.loc[asia_close_time[0], 'close']
+            else:
+                entry_price = current_price
+            stop_loss = strategy_analysis['stop_loss']
+            # London session RR
+            df_london = df.between_time('07:00', '15:00')
+            london_rr_max, london_max_price = calculate_max_rr(df_london, entry_price, stop_loss) if not df_london.empty else (None, None)
+            # Full day RR
+            day_rr_max, day_max_price = calculate_max_rr(df, entry_price, stop_loss)
+            # Perinteinen RR (nykyisillä take profit/stop loss -ehdoilla)
+            rr = strategy_analysis['risk_reward_ratio']
+            
+            # Create chart with RR markers
+            chart_file = create_price_chart(
+                token, df, vwap, high, low, current_price,
+                london_rr=rr, london_rr_max=london_rr_max, london_max_price=london_max_price,
+                day_rr=rr, day_rr_max=day_rr_max, day_max_price=day_max_price
+            )
             if chart_file:
                 chart_files.append(chart_file)
             
@@ -368,6 +408,7 @@ def build_message() -> str:
                 
             setup_emoji = get_setup_quality(setup_score)
             
+            # RR-analyysit viestiin
             lines.append(
                 f"*{token}*  {emoji} ({percent_text})\n"
                 f"`Asia:`  {low:.1f}–{high:.1f} ({strategy_analysis['range_percent']:.1f}%)\n"
@@ -378,7 +419,7 @@ def build_message() -> str:
                 f"`Signals:`  {', '.join(strategy_analysis['indicator_signals'])}\n"
                 f"`Stop:`  ${strategy_analysis['stop_loss']:.1f}\n"
                 f"`Target:`  ${strategy_analysis['take_profit']:.1f}\n"
-                f"`R/R:`  {strategy_analysis['risk_reward_ratio']:.1f}\n"
+                f"`R/R:`  {rr:.2f} (London max: {london_rr_max:.2f} | Day max: {day_rr_max:.2f})\n"
                 f"`Setup:`  {setup_emoji} {setup_score}\n"
             )
             
