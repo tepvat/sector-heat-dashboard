@@ -114,24 +114,24 @@ def create_price_chart(symbol, df, vwap, high, low, current_price):
         fig, ax = plt.subplots(figsize=(12, 6))
         
         # Plot price (Asia session only)
-        ax.plot(df_asia.index, df_asia['close'], label='Price', color='blue')
+        ax.plot(df_asia.index, df_asia['close'], label='Price', color='blue', linewidth=2)
         
         # Plot VWAP (Asia session VWAP)
-        ax.axhline(y=vwap, color='red', linestyle='--', label='VWAP')
+        ax.axhline(y=vwap, color='magenta', linestyle='--', linewidth=2, label='VWAP')
         
         # Plot Asia session high/low
-        ax.axhline(y=asia_high, color='green', linestyle='--', label='Asia High')
-        ax.axhline(y=asia_low, color='red', linestyle='--', label='Asia Low')
+        ax.axhline(y=asia_high, color='limegreen', linestyle='--', linewidth=2, label='Asia High')
+        ax.axhline(y=asia_low, color='orange', linestyle='--', linewidth=2, label='Asia Low')
         
-        # Plot full-day high/low (dotted gray)
-        ax.axhline(y=high, color='gray', linestyle=':', label='Full Day High')
-        ax.axhline(y=low, color='gray', linestyle=':', label='Full Day Low')
+        # Plot full-day high/low (dotted black)
+        ax.axhline(y=high, color='black', linestyle=':', linewidth=1.5, label='Full Day High')
+        ax.axhline(y=low, color='black', linestyle=':', linewidth=1.5, label='Full Day Low')
         
         # Plot current price
-        ax.axhline(y=current_price, color='purple', linestyle='-', label='Current')
+        ax.axhline(y=current_price, color='purple', linestyle='-', linewidth=2, label='Current')
         
         # Add legend
-        ax.legend()
+        ax.legend(loc='upper left', fontsize=10)
         
         # Format x-axis
         ax.xaxis.set_major_formatter(mdates.DateFormatter('%H:%M UTC'))
