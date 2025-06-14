@@ -106,7 +106,10 @@ def create_price_chart(symbol, df, vwap, high, low, current_price, london_rr=Non
     """Create price chart with VWAP and levels for Asia session (00-07 UTC) and show RR levels."""
     try:
         # Ensure index is in UTC
-        df.index = df.index.tz_localize('UTC')
+        if df.index.tz is None:
+            df.index = df.index.tz_localize('UTC')
+        else:
+            df.index = df.index.tz_convert('UTC')
         
         # Filter data for Asia session (00-07 UTC)
         df_asia = df.between_time('00:00', '07:00')
