@@ -503,17 +503,25 @@ def main():
             
             # Send charts
             for chart_file in chart_files:
+                print(f"[DEBUG] Preparing to send chart: {chart_file}")
                 if os.path.exists(chart_file):
-                    print(f"Sending chart: {chart_file}")
-                    with open(chart_file, 'rb') as f:
-                        await bot.send_photo(
-                            chat_id=CHAT,
-                            photo=f
-                        )
-                    print(f"Chart {chart_file} sent successfully")
-                    os.remove(chart_file)  # Clean up after sending
+                    print(f"[DEBUG] Chart file exists: {chart_file}")
+                    try:
+                        with open(chart_file, 'rb') as f:
+                            await bot.send_photo(
+                                chat_id=CHAT,
+                                photo=f
+                            )
+                        print(f"[DEBUG] Chart {chart_file} sent successfully")
+                    except Exception as e:
+                        print(f"[DEBUG] Failed to send chart {chart_file}: {e}")
+                    try:
+                        os.remove(chart_file)  # Clean up after sending
+                        print(f"[DEBUG] Chart file {chart_file} removed after sending")
+                    except Exception as e:
+                        print(f"[DEBUG] Failed to remove chart file {chart_file}: {e}")
                 else:
-                    print(f"Warning: Chart file {chart_file} not found")
+                    print(f"[DEBUG] Chart file {chart_file} not found")
             
         except TelegramError as e:
             print(f"Telegram error: {str(e)}")
