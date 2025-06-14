@@ -383,7 +383,10 @@ def build_message() -> str:
             
             # --- RR Analysis ---
             # Entry price: Asia session close (07:00 UTC)
-            df.index = df.index.tz_localize('UTC')
+            if df.index.tz is None:
+                df.index = df.index.tz_localize('UTC')
+            else:
+                df.index = df.index.tz_convert('UTC')
             df_07 = df.between_time('07:00', '07:00')
             if not df_07.empty:
                 entry_price = df_07.iloc[0]['close']
